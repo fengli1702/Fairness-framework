@@ -6,9 +6,9 @@ from IRT import IRT
 from sklearn.model_selection import train_test_split
 
 
-train_data = pd.read_csv("./data/a0910/virtual_user_train_data.csv")
-valid_data = pd.read_csv("./data/a0910/virtual_user_valid_data.csv")
-test_data = pd.read_csv("./data/a0910/virtual_user_test_data.csv")
+train_data = pd.read_csv("../data/a0910/virtual_user_train_data.csv")
+valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
+test_data = pd.read_csv("../data/a0910/virtual_user_test_data.csv")
 
 batch_size = 256
 
@@ -49,7 +49,7 @@ print(f"Test AUC: {auc}, Test Accuracy: {accuracy}")
  #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
 
 
-all_virtual_user_data = pd.read_csv('./data/a0910/all_virtual_user_data.csv')
+all_virtual_user_data = pd.read_csv('../data/a0910/all_virtual_user_data.csv')
 
 # Transform function to include origin_id
 def transform2(x, y, z, origin_ids, batch_size, **params):

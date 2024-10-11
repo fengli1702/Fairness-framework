@@ -82,7 +82,7 @@ df_all_virtual_scores = pd.DataFrame(all_virtual_scores, columns=["origin_id", "
 df_all_virtual_scores = df_all_virtual_scores.sort_values(by=['user_id'])
 
 # Save the sorted data to the CSV file
-df_all_virtual_scores.to_csv('./data/a0910/all_virtual_user_data.csv', index=False)
+df_all_virtual_scores.to_csv('./a0910/all_virtual_user_data.csv', index=False)
 
 print('All virtual scores saved to all_virtual_user_data.csv in sorted order by virtual_user_id')
 
@@ -115,11 +115,11 @@ def split_data(file_path, train_size=0.7, valid_size=0.15, test_size=0.15):
     valid_data.sort_values(by="user_id", inplace=True)
     test_data.sort_values(by="user_id", inplace=True)
 
-    train_data.to_csv('./data/a0910/virtual_user_train_data.csv', index=False)
-    valid_data.to_csv('./data/a0910/virtual_user_valid_data.csv', index=False)
-    test_data.to_csv('./data/a0910/virtual_user_test_data.csv', index=False)
+    train_data.to_csv('./a0910/virtual_user_train_data.csv', index=False)
+    valid_data.to_csv('./a0910/virtual_user_valid_data.csv', index=False)
+    test_data.to_csv('./a0910/virtual_user_test_data.csv', index=False)
     
     print("Data has been split and saved as virtual_user_train_data.csv, virtual_user_valid_data.csv, and virtual_user_test_data.csv.")
 
 # Call the function to split the data
-split_data('./data/a0910/all_virtual_user_data.csv')
+split_data('./a0910/all_virtual_user_data.csv')
