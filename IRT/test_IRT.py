@@ -1,4 +1,6 @@
 # test_irt.py
+# -*- coding: utf-8 -*-
+
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
@@ -6,7 +8,7 @@ from IRT import IRT
 from sklearn.model_selection import train_test_split
 
 
-train_data = pd.read_csv("../data/a0910/virtual_user_train_data.csv")
+train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
 valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
 test_data = pd.read_csv("../data/a0910/virtual_user_test_data.csv")
 
@@ -42,7 +44,8 @@ model.load("irt_model.pth")
 
 # 评估模型
 auc, accuracy = model.eval(test)
-print(f"Test AUC: {auc}, Test Accuracy: {accuracy}")
+print("Test AUC: {}, Test Accuracy: {}".format(auc, accuracy))
+
 
 
 #for name, param in model.irt_net.named_parameters():

@@ -12,6 +12,12 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score
 import pandas as pd
 
+
+if torch.cuda.is_available():
+
+    print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+
+
 def irt2pl(theta, a, b, *, F=np):
     """
 
@@ -74,7 +80,7 @@ class MIRT(CDM):
         super(MIRT, self).__init__()
         self.irt_net = MIRTNet(user_num, item_num, latent_dim, a_range)
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.001) -> ...:
         self.irt_net = self.irt_net.to(device)
         loss_function = nn.BCELoss()
 
@@ -102,7 +108,7 @@ class MIRT(CDM):
                 auc, accuracy = self.eval(test_data, device=device)
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
-    def eval(self, test_data, device="cpu") -> tuple:
+    def eval(self, test_data, device="cuda") -> tuple:
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()
         y_pred = []
@@ -126,35 +132,38 @@ class MIRT(CDM):
         self.irt_net.load_state_dict(torch.load(filepath))
         logging.info("load parameters from %s" % filepath)
     
-    def extract_ability_parameters(self, test_data, filepath, device="cpu"):
+    def extract_ability_parameters(self, test_data, filepath, device="cuda"):
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()  # Switch to evaluation mode
-    
+
         abilities = []
         processed_user_ids = set()  # To track processed user_ids
-    
+
         for batch_data in tqdm(test_data, "Extracting abilities"):
             # Unpack the batch_data, including origin_id
             origin_id, user_id, item_id, response = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
-    
-            # Retrieve the ability (θ) parameter for the user
+
+            # Retrieve the multidimensional ability (θ) parameter for the user
             theta: torch.Tensor = self.irt_net.theta(user_id).squeeze()
-    
+
+            # Calculate the mean of the multidimensional theta
+            theta_mean: torch.Tensor = theta.mean(dim=-1)
+
             # Retrieve the discrimination (a) parameter for the items (if needed)
             a: torch.Tensor = self.irt_net.a(item_id).squeeze()
-    
-            # Add user_id, corresponding θ value, and origin_id to the list
+
+            # Add user_id, corresponding averaged θ value, and origin_id to the list
             for i, user in enumerate(user_id.cpu().numpy()):
                 if user not in processed_user_ids:
-                    abilities.append([int(origin_id[i]), int(user), float(theta[i].item()), a[i].cpu().numpy().tolist()])
+                    abilities.append([int(origin_id[i]), int(user), float(theta_mean[i].item())])
                     processed_user_ids.add(user)  # Mark user_id as processed
-    
+
         # Save abilities to a CSV file with origin_id
-        df_abilities = pd.DataFrame(abilities, columns=["origin_id", "user_id", "theta", "item_discrimination"])
+        df_abilities = pd.DataFrame(abilities, columns=["origin_id", "user_id", "theta_avg"])
         df_abilities.sort_values(by="user_id", inplace=True)  # Sort by user_id
         df_abilities.to_csv(filepath, index=False)
         print(f"Ability parameters saved to {filepath}")
-    
+
         self.irt_net.train()  # Switch back to training mode

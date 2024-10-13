@@ -1,7 +1,7 @@
 import pandas as pd
 
 # 读取数据文件
-data = pd.read_csv("./data/a0910/all_virtual_user_data.csv")
+data = pd.read_csv("./a0910/all_virtual_user_data.csv")
 
 # 获取前100个不同的 origin_id
 unique_origin_ids = data["origin_id"].unique()[:100]

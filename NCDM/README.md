@@ -1,0 +1,1 @@
+epoch = 10 auc: 0.860641, accuracy: 0.805735  train集合all_virtual_user_data.csv，fairness评估 all_virtual_user_data.csv

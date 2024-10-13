@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
 
-train_data = pd.read_csv("../data/a0910/virtual_user_train_data.csv")
+train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
 valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
 test_data = pd.read_csv("../data/a0910/virtual_user_test_data.csv")
 
