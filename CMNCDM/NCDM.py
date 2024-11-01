@@ -1,5 +1,4 @@
 # coding: utf-8
-# 2021/4/1 @ WangFei
 
 import logging
 import torch
@@ -8,14 +7,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score, accuracy_score, mean_squared_error, mean_absolute_error
 from EduCDM import CDM
-import pandas as pd
+from loss import PairSCELoss, HarmonicLoss
+
 
 class PosLinear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         weight = 2 * F.relu(1 * torch.neg(self.weight)) + self.weight
-        # neg计算权重的相反数, relu将负数置0, 乘2将权重放大, 加self.weight将负数权重变为正数
         return F.linear(input, weight, self.bias)
 
 
@@ -41,15 +40,18 @@ class Net(nn.Module):
         self.drop_2 = nn.Dropout(p=0.5)
         self.prednet_full3 = PosLinear(self.prednet_len2, 1)
 
-        # initialize    
+        # initialize
         for name, param in self.named_parameters():
             if 'weight' in name:
                 nn.init.xavier_normal_(param)
 
-    def forward(self, stu_id, input_exercise, input_knowledge_point):
+    def forward(self, stu_id, input_exercise, input_knowledge_point, user_id_pair=None):
         # before prednet
         stu_emb = self.student_emb(stu_id)
         stat_emb = torch.sigmoid(stu_emb)
+        if user_id_pair is not None:
+            stu_emb_pair = self.student_emb(user_id_pair)
+            stat_emb_pair = torch.sigmoid(stu_emb_pair)
         k_difficulty = torch.sigmoid(self.k_difficulty(input_exercise))
         e_difficulty = torch.sigmoid(self.e_difficulty(input_exercise))  # * 10
         # prednet
@@ -57,53 +59,112 @@ class Net(nn.Module):
         input_x = self.drop_1(torch.sigmoid(self.prednet_full1(input_x)))
         input_x = self.drop_2(torch.sigmoid(self.prednet_full2(input_x)))
         output_1 = torch.sigmoid(self.prednet_full3(input_x))
-
+        if user_id_pair is not None:
+            return output_1.view(-1), stat_emb, stat_emb_pair
         return output_1.view(-1)
 
 
 class NCDM(CDM):
     '''Neural Cognitive Diagnosis Model'''
 
-    def __init__(self, knowledge_n, exer_n, student_n):
+    def __init__(self, knowledge_n, exer_n, student_n, zeta=0.5, groupsize=11):
         super(NCDM, self).__init__()
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
+        self.zeta = zeta
+        self.groupsize = groupsize
 
     def train(self, train_data, test_data=None, epoch=10, device="cuda", lr=0.002, silence=False):
-        self.ncdm_net = self.ncdm_net.to(device)
+        self.ncdm_net = self.ncdm_net.to(device)#cpu
         self.ncdm_net.train()
-        loss_function = nn.BCELoss()
+        score_loss_function = nn.BCELoss()
+        theta_loss_function = PairSCELoss()  # now has id, id_pair, n as additional inputs
+        loss_function = HarmonicLoss(self.zeta)
         optimizer = optim.Adam(self.ncdm_net.parameters(), lr=lr)
+        
         for epoch_i in range(epoch):
             epoch_losses = []
             batch_count = 0
+            count = 0
             for batch_data in tqdm(train_data, "Epoch %s" % epoch_i):
-                #print(batch_data)
                 batch_count += 1
-                user_id, item_id, knowledge_emb, y = batch_data
-                user_id: torch.Tensor = user_id.to(device)
-                print(user_id)
-                #print(user_id[0],user_id[1],user_id[2])
-                item_id: torch.Tensor = item_id.to(device)
-                knowledge_emb: torch.Tensor = knowledge_emb.to(device)
-                y: torch.Tensor = y.to(device)
-                pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb)
-                loss = loss_function(pred, y)
+                origin_id, user_id, item_id, knowledge_emb, y = batch_data
+                #originid index the data
+                origin_id = origin_id.to(device)
+                user_id :torch.Tensor = user_id.to(device) #use this to calculate
+                item_id :torch.Tensor = item_id.to(device)
+                knowledge_emb :torch.Tensor = knowledge_emb.to(device)
+                y :torch.Tensor = y.to(device) #score
 
+                
+                pair_id=[] #there are batch_size id in total
+                # each have a group ,so len(pair_id)=batch_size
+                # len(pair_id[i]) = self.group_size
+                for i in range(user_id.size(0)):
+                    group_pair = []
+                    group_index = user_id[i].item() // self.groupsize
+                    for j in range(self.groupsize):
+                        group_pair.append(j + group_index * self.groupsize)
+                    
+                    pair_id.append(group_pair)
+                
+                pair_id_tensor = torch.tensor(pair_id , device = device)
+                loss_theta = 0
+                loss_score = 0
+
+                for i in range(len(pair_id)):
+                    sample_indices = torch.randperm(len(pair_id[i]))[:len(pair_id[i]) // 3]  # Randomly select 1/3
+                    for j in sample_indices:
+                        if i != pair_id[i][j] :  # Ensure we're not calculating loss with the user itself
+                            # Call the model for the user and each group member
+
+                            predicted_response, predicted_theta, predicted_theta_pair = self.ncdm_net(
+                                user_id, item_id,
+                                knowledge_emb, pair_id_tensor[i][j]
+                            )
+                            #print(predicted_response.shape)
+                            # Calculate theta loss between the user and each group member
+                            theta_i = predicted_theta[i]          # Shape [123]
+                            predicted_response = torch.Tensor(predicted_response)
+                            predicted_theta = torch.Tensor(theta_i)
+                            predicted_theta_pair = torch.Tensor(predicted_theta_pair)
+                            #print(predicted_theta.shape)
+                            #print(predicted_theta_pair.shape)
+
+                            loss1, count1 = theta_loss_function(
+                                predicted_theta, predicted_theta_pair,
+                                user_id[i].item(), pair_id[i][j], self.groupsize
+                            )
+                            loss1 = loss1.mean().item()
+                            #print(loss_theta.shape)  int
+                            loss_theta += loss1
+                            count += count1
+                
+                #print(predicted_response.shape)
+                #print(y.shape)
+                loss_score = score_loss_function(predicted_response, y)
+                loss_theta = loss_theta / count
+                loss_score = loss_score.mean()
+
+                loss = loss_function(loss_score, loss_theta)
+                loss = loss.mean()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
                 epoch_losses.append(loss.mean().item())
 
-            print("[Epoch %d] average loss: %.6f" % (epoch_i, float(np.mean(epoch_losses))))
+            print("[Epoch %d] average loss: %.6f, Count: %d" % (epoch_i, float(np.mean(epoch_losses)), count))
 
-            if test_data is not None:
-                auc, accuracy = self.eval(test_data, device=device)
-                print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
+        if test_data is not None:
+            rmse, mae, auc, accuracy = self.eval(test_data, device=device)
+            print("[Epoch %d] rmse: %.6f, mae: %.6f, auc: %.6f, accuracy: %.6f" % (epoch_i, rmse, mae, auc, accuracy))
 
-    def eval(self, test_data, device="cuda"):
+    def eval(self, test_data, device="cpu"):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
+        loss_function = nn.BCELoss()
+        losses = []
+        
         y_true, y_pred = [], []
         for batch_data in tqdm(test_data, "Evaluating"):
             user_id, item_id, knowledge_emb, y = batch_data
@@ -111,10 +172,15 @@ class NCDM(CDM):
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)
             pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb)
+            y: torch.Tensor = y.to(device)
+            loss = loss_function(pred, y)
+            losses.append(loss.mean().item())
+            
             y_pred.extend(pred.detach().cpu().tolist())
             y_true.extend(y.tolist())
 
-        return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
+        print("[Valid Loss] %.6f" % (float(np.mean(losses))))
+        return np.sqrt(mean_squared_error(y_true, y_pred)), mean_absolute_error(y_true, y_pred), roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
 
     def save(self, filepath):
         torch.save(self.ncdm_net.state_dict(), filepath)
@@ -123,6 +189,7 @@ class NCDM(CDM):
     def load(self, filepath):
         self.ncdm_net.load_state_dict(torch.load(filepath))  # , map_location=lambda s, loc: s
         logging.info("load parameters from %s" % filepath)
+
     def extract_user_abilities(self, test_data, device="cuda", weighted=False, filepath="v_ability_parameters.csv"):
         """
         Extract and save student ability parameters (hs) after training, with an option to compute
