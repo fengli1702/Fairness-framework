@@ -23,9 +23,9 @@ class PairSCELoss(nn.Module):
         
         # if id > id_pair, pos = 1, otherwise pos = -1 
         if id > id_pair:
-            pos = -1.0
-        else:
             pos = 1.0
+        else:
+            pos = -1.0
 
         if pred_theta.dim() == 1:
             pred_theta = pred_theta.unsqueeze(-1)

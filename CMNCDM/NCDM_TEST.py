@@ -95,13 +95,19 @@ train_set, valid_set, test_set = [
     for data in [train_data, valid_data, test_data]
 ]
 
+
+
 logging.getLogger().setLevel(logging.INFO)
 cdm = NCDM(knowledge_n, item_n, user_n)
-cdm.train(train_set, valid_set, epoch=1, device="cuda")
+cdm.train(train_set, valid_set, epoch=10, device="cuda")
+print("train finished")
 cdm.save("ncdm.snapshot")
-
+print("save finished")
 cdm.load("ncdm.snapshot")
+print("load finished")
 auc, accuracy = cdm.eval(test_set)
 print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 cdm.extract_user_abilities(train_set, weighted=False, filepath="v_ability_parameters.csv")
+
+

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score, mean_squared_error, mean_absolute_error
 from EduCDM import CDM
 from loss import PairSCELoss, HarmonicLoss
+import pandas as pd
 
 
 class PosLinear(nn.Linear):
@@ -89,7 +90,7 @@ class NCDM(CDM):
                 batch_count += 1
                 origin_id, user_id, item_id, knowledge_emb, y = batch_data
                 #originid index the data
-                origin_id = origin_id.to(device)
+                #origin_id = origin_id.to(device)
                 user_id :torch.Tensor = user_id.to(device) #use this to calculate
                 item_id :torch.Tensor = item_id.to(device)
                 knowledge_emb :torch.Tensor = knowledge_emb.to(device)
@@ -156,9 +157,11 @@ class NCDM(CDM):
             print("[Epoch %d] average loss: %.6f, Count: %d" % (epoch_i, float(np.mean(epoch_losses)), count))
 
         if test_data is not None:
-            rmse, mae, auc, accuracy = self.eval(test_data, device=device)
-            print("[Epoch %d] rmse: %.6f, mae: %.6f, auc: %.6f, accuracy: %.6f" % (epoch_i, rmse, mae, auc, accuracy))
+            auc, accuracy = self.eval(test_data, device=device)
+            epoch_i=0
+            print("[Epoch %d]  auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
 
+    
     def eval(self, test_data, device="cpu"):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
@@ -167,7 +170,7 @@ class NCDM(CDM):
         
         y_true, y_pred = [], []
         for batch_data in tqdm(test_data, "Evaluating"):
-            user_id, item_id, knowledge_emb, y = batch_data
+            origin_id, user_id, item_id, knowledge_emb, y = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)
@@ -180,14 +183,15 @@ class NCDM(CDM):
             y_true.extend(y.tolist())
 
         print("[Valid Loss] %.6f" % (float(np.mean(losses))))
-        return np.sqrt(mean_squared_error(y_true, y_pred)), mean_absolute_error(y_true, y_pred), roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
+        return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
 
     def save(self, filepath):
         torch.save(self.ncdm_net.state_dict(), filepath)
         logging.info("save parameters to %s" % filepath)
 
     def load(self, filepath):
-        self.ncdm_net.load_state_dict(torch.load(filepath))  # , map_location=lambda s, loc: s
+    # 加载时显式指定 weights_only=True
+        self.ncdm_net.load_state_dict(torch.load(filepath, weights_only=True))
         logging.info("load parameters from %s" % filepath)
 
     def extract_user_abilities(self, test_data, device="cuda", weighted=False, filepath="v_ability_parameters.csv"):
@@ -207,7 +211,7 @@ class NCDM(CDM):
         user_theta_map = {}
 
         for batch_data in test_data:
-            user_id, item_id, knowledge_emb, y = batch_data
+            origin_id, user_id, item_id, knowledge_emb, y = batch_data
             user_id = user_id.to(device)
             item_id = item_id.to(device)
 
