@@ -1,10 +1,6 @@
 # coding: utf-8
-# 2021/4/23 @ tongshiwei
 import sys
 import os
-
-# 添加项目根目录到 sys.path
-sys.path.insert(0, '/content/Fairness-framework')
 import logging
 import torch
 import torch.nn as nn
@@ -14,8 +10,65 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, accuracy_score
 from EduCDM import CDM
-from loss import IRTPairSCELoss, IRTLoss
 import pandas as pd
+
+# 将损失函数类移到同一文件中
+class IRTPairSCELoss(nn.Module):
+    def __init__(self):
+        super(IRTPairSCELoss, self).__init__()
+
+    def forward(self, pred_theta, pred_theta_pair, id, id_pair, n, *args):
+        if id/n != id_pair/n:
+            return torch.zeros_like(pred_theta), 0
+        
+        if id > id_pair:
+            pos = 1.0
+        else:
+            pos = -1.0
+
+        if pred_theta.dim() == 1:
+            pred_theta = pred_theta.unsqueeze(-1)
+        if pred_theta_pair.dim() == 1:
+            pred_theta_pair = pred_theta_pair.unsqueeze(-1)
+            
+        pred_theta = pred_theta.mean(dim=1)
+        pred_theta_pair = pred_theta_pair.mean(dim=1)
+        
+        if pred_theta.dim() == 1:
+            pred_theta = pred_theta.unsqueeze(-1)
+        if pred_theta_pair.dim() == 1:
+            pred_theta_pair = pred_theta_pair.unsqueeze(-1)
+
+        loss = torch.where(
+            ((pos == 1.0) & (pred_theta > pred_theta_pair)) | ((pos == -1.0) & (pred_theta < pred_theta_pair)),
+            torch.zeros_like(pred_theta),
+            (pred_theta - pred_theta_pair) ** 2
+        )
+        
+        count = torch.sum(torch.where(
+            ((pos == 1.0) & (pred_theta > pred_theta_pair)) | ((pos == -1.0) & (pred_theta < pred_theta_pair)),
+            torch.zeros_like(pred_theta),
+            torch.ones_like(pred_theta)
+        )).item()
+        
+        return loss.sum(), count
+
+class IRTLoss(object):
+    def __init__(self, zeta=0.5):
+        self.zeta = zeta
+        self.pair_loss = IRTPairSCELoss()
+        
+    def __call__(self, pred_scores, true_scores, pred_theta, pred_theta_pair, id, id_pair, n):
+        # 预测损失（使用二元交叉熵）
+        score_loss = F.binary_cross_entropy_with_logits(pred_scores, true_scores)
+        
+        # 配对损失
+        theta_loss, count = self.pair_loss(pred_theta, pred_theta_pair, id, id_pair, n)
+        
+        # 组合损失
+        total_loss = score_loss + self.zeta * theta_loss
+        
+        return total_loss, score_loss, theta_loss, count
 
 class IRTNet(nn.Module):
     def __init__(self, student_n, exer_n):
@@ -50,12 +103,12 @@ class IRT(CDM):
         self.irt_net = IRTNet(student_n, exer_n)
         self.zeta = zeta
         self.groupsize = groupsize
+        self.loss_function = IRTLoss(self.zeta)  # 初始化损失函数
 
     def train(self, train_data, test_data=None, epoch=10, device="cuda", lr=0.002, silence=False):
         self.irt_net = self.irt_net.to(device)
         self.irt_net.train()
         
-        loss_function = IRTLoss(self.zeta)
         optimizer = optim.Adam(self.irt_net.parameters(), lr=lr)
         
         for epoch_i in range(epoch):
@@ -92,7 +145,7 @@ class IRT(CDM):
                                 user_id, item_id, pair_id_tensor[i][j]
                             )
                             
-                            loss, loss_s, loss_t, count_t = loss_function(
+                            loss, loss_s, loss_t, count_t = self.loss_function(
                                 predicted_response, y,
                                 predicted_theta[i], predicted_theta_pair,
                                 user_id[i].item(), pair_id[i][j], self.groupsize
