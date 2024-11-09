@@ -29,7 +29,7 @@ class IRTNet(nn.Module):
         self.value_range = value_range
         self.a_range = a_range
 
-    def forward(self, user, item, farness):
+    def forward(self, user, item, fairness):
         theta = torch.squeeze(self.theta(user), dim=-1)
         a = torch.squeeze(self.a(item), dim=-1)
         b = torch.squeeze(self.b(item), dim=-1)
@@ -37,7 +37,7 @@ class IRTNet(nn.Module):
 
         c = torch.sigmoid(c)
 
-        if farness:
+        if fairness:
             return torch.sigmoid(theta)
 
         if self.value_range is not None:
@@ -80,7 +80,7 @@ class IRT(CDM):
 
             for batch_data in tqdm(train_data, "Epoch %s" % e):
                 user_id, item_id, response = batch_data
-                predicted_response= self.irt_net(user_id, item_id , farness = False)
+                predicted_response= self.irt_net(user_id, item_id , fairness = False)
                 #print("predicted_response: ",predicted_response.shape)  # torch.Size([256]) 是一个batch
                 # 一个batch的response，一维向量
                 # 计算BCE损失
@@ -89,7 +89,7 @@ class IRT(CDM):
                 #print(user_id)
                 #获得user的group
                 pair_id=[] #there are batch_size id in total
-                # each have a group ,so len(pair_id)=batch_size
+                #  each have a group ,so len(pair_id)=batch_size
                 # len(pair_id[i]) = self.group_size 
                 for i in range(user_id.size(0)):
                     group_pair = []
@@ -111,7 +111,7 @@ class IRT(CDM):
                         group_user_ids = pair_id_tensor[i]  # Get user IDs for the current group
 
                         # Call `self.irt_net` to get predicted_response and theta for this group
-                        theta_group = self.irt_net(group_user_ids, item_id , farness = True)
+                        theta_group = self.irt_net(group_user_ids, item_id , fairness = True)
                         #print("theta_group: ",theta_group.shape)  # torch.Size([1, 11]) 是一个group
                         #print("theta_group: ",theta_group)
 
@@ -169,7 +169,7 @@ class IRT(CDM):
         with torch.no_grad():
             for batch_data in tqdm(test_data, "evaluating"):
                 user_id, item_id, response = batch_data
-                pred = self.irt_net(user_id, item_id , farness = False)
+                pred = self.irt_net(user_id, item_id , fairness = False)
                 y_pred.extend(pred.cpu().numpy())
                 y_true.extend(response.cpu().numpy())
 

@@ -16,3 +16,8 @@ Average Spearman's Rank Correlation Coefficient: 0.2696058053458776
 Average Cosine Similarity: 0.7913159443845366
 Average Mean Reciprocal Rank: 0.2745343040797587
 
+
+这是在test集下检测accuracy的结果。
+C:\programming\codefile\newgit\fairness\IRT_finial>python test_acc.py
+evaluating: 100%|██████████████████████████████████████████████████████████████████████████████████| 218/218 [00:00<00:00, 351.38it/s]
+Test AUC: 0.6592343295496417, Test Accuracy: 0.6702474892395983

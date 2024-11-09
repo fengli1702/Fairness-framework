@@ -13,10 +13,10 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 import pandas as pd
 
 
-if torch.cuda.is_available():
-
-    print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-
+#if torch.cpu.is_available():
+#
+#    print(f"Using GPU: {torch.cpu.get_device_name(0)}")
+#
 
 def irt2pl(theta, a, b, *, F=np):
     """
@@ -80,7 +80,7 @@ class MIRT(CDM):
         super(MIRT, self).__init__()
         self.irt_net = MIRTNet(user_num, item_num, latent_dim, a_range)
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
         self.irt_net = self.irt_net.to(device)
         loss_function = nn.BCELoss()
 
@@ -95,7 +95,7 @@ class MIRT(CDM):
                 predicted_response: torch.Tensor = self.irt_net(user_id, item_id)
                 response: torch.Tensor = response.to(device)
                 loss = loss_function(predicted_response, response)
-
+                #print(loss)
                 # back propagation
                 trainer.zero_grad()
                 loss.backward()
@@ -108,7 +108,7 @@ class MIRT(CDM):
                 auc, accuracy = self.eval(test_data, device=device)
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
-    def eval(self, test_data, device="cuda") -> tuple:
+    def eval(self, test_data, device="cpu") -> tuple:
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()
         y_pred = []
@@ -132,7 +132,7 @@ class MIRT(CDM):
         self.irt_net.load_state_dict(torch.load(filepath))
         logging.info("load parameters from %s" % filepath)
     
-    def extract_ability_parameters(self, test_data, filepath, device="cuda"):
+    def extract_ability_parameters(self, test_data, filepath, device="cpu"):
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()  # Switch to evaluation mode
 

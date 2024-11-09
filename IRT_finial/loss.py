@@ -10,6 +10,7 @@ class FairnessLoss(nn.Module):
 
     def calculate_pairwise_probabilities(self, predictions):
         # Compute pairwise differences for predictions
+        # diff_matrix[i][j] = predictions[i] - predictions[j],
         diff_matrix = predictions.unsqueeze(2) - predictions.unsqueeze(1)
         # Convert differences to probabilities using sigmoid
         pred_probs = torch.sigmoid(self.alpha * diff_matrix)
