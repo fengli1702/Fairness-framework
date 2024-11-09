@@ -8,7 +8,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 # 读取数据
-file_path = "IRT/v_ability_parameters.csv"
+file_path = "IRT_finial/v_ability_parameters.csv"
 df = pd.read_csv(file_path)
 
 # 定义DCG计算函数
