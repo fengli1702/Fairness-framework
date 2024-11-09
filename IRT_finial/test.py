@@ -34,7 +34,7 @@ train, valid, test = [
 model = IRT(27424, 17747)
 
 # 训练模型
-model.train(train, valid, epoch=10)
+model.train(train, valid, epoch=10 )
 
 # 保存模型
 model.save("irt_model.pth")

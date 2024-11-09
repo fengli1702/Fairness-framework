@@ -8,7 +8,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 # 读取数据
-file_path = "IRT_finial/v_ability_parameters.csv"
+file_path = "IRT/v_ability_parameters.csv"
 df = pd.read_csv(file_path)
 
 # 定义DCG计算函数
@@ -102,8 +102,8 @@ average_cos_sim = np.mean(cosine_similarities)
 average_mrr = np.mean(mean_reciprocal_ranks)
 
 # 打印平均公平性指标
-print("Average NDCG:", average_ndcg)
-print("Average Kendall Tau Distance:", average_ktd)
-print("Average Spearman's Rank Correlation Coefficient:", average_srho)
-print("Average Cosine Similarity:", average_cos_sim)
-print("Average Mean Reciprocal Rank:", average_mrr)
+print("Average NDCG Higher is better :", average_ndcg)
+print("Average Kendall Tau Distance Lower is better:", average_ktd)
+print("Average Spearman's Rank Correlation Coefficient Higher is better:", average_srho)
+print("Average Cosine Similarity Higher is better  :", average_cos_sim)
+print("Average Mean Reciprocal Rank Higher is better:", average_mrr)
