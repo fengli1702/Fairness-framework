@@ -29,9 +29,9 @@ train, valid, test = [
 
 logging.getLogger().setLevel(logging.INFO)
 
-cdm = MIRT(27424, 17747, 123)
+cdm = MIRT(27424, 17747, 123 , a_range=3)
 
-cdm.train(train, valid, epoch=1)
+cdm.train(train, valid, epoch=10)
 cdm.save("mirt.params")
 
 cdm.load("mirt.params")

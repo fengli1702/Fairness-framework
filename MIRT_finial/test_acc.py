@@ -1,15 +1,13 @@
-# test_irt.py
-# -*- coding: utf-8 -*-
-
+# coding: utf-8
+# 2021/3/23 @ tongshiwei
+import logging
+from MIRT import MIRT
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
-from myIRT import IRT
-from sklearn.model_selection import train_test_split
-
 
 train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
+valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
 test_data = pd.read_csv("../data/a0910/test.csv")
 
 batch_size = 256
@@ -29,22 +27,14 @@ train, valid, test = [
     for data in [train_data, valid_data, test_data]
 ]
 
-# 初始化IRT模型
+logging.getLogger().setLevel(logging.INFO)
 
-model = IRT(27424, 17747)
+cdm = MIRT(27424, 17747, 123)
 
-# 加载模型
-model.load("irt_model.pth")
-
-# 评估模型
-auc, accuracy = model.eval(test)
-print("IRT_finial Test AUC: {}, Test Accuracy: {}".format(auc, accuracy))
-
-
-
-#for name, param in model.irt_net.named_parameters():
- #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
+cdm.load("mirt.params")
+auc, accuracy = cdm.eval(test)
+print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 #存入文件，acc和accuracy
 with open("test_acc.txt", "w") as f:
-    f.write("IRT_finial : test auc: %.6f, accuracy: %.6f" % (auc, accuracy))
+    f.write("MIRT: test auc: %.6f, accuracy: %.6f" % (auc, accuracy))

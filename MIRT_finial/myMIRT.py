@@ -60,6 +60,7 @@ class MIRTNet(nn.Module):
 
     def forward(self, user, item , fairness):
         theta = torch.squeeze(self.theta(user), dim=-1)
+        theta = torch.sigmoid(theta)
         #求平均返回theta
         if fairness:
             theta = torch.mean(theta, dim=-1)
@@ -72,6 +73,7 @@ class MIRTNet(nn.Module):
         else:
             a = F.softplus(a)
         b = torch.squeeze(self.b(item), dim=-1)
+        b = torch.sigmoid(b)
         if torch.max(theta != theta) or torch.max(a != a) or torch.max(b != b):  # pragma: no cover
             raise ValueError('ValueError:theta,a,b may contains nan!  The a_range is too large.')
         return self.irf(theta, a, b, **self.irf_kwargs)

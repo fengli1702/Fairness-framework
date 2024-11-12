@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
-"""公平性度量代码.ipynb
-
-
 """
+公平性度量代码.py
+"""
+
 import pandas as pd
 import numpy as np
 from scipy.stats import spearmanr
+import sys
 
-# 读取数据
-file_path = "IRT/v_ability_parameters.csv"
+# Check if a file path argument was provided
+if len(sys.argv) < 2:
+    print("Error: No input file path provided.")
+    print("Usage: python get_fairness_score.py <path_to_v_ability_parameters.csv>")
+    sys.exit(1)
+
+# Read the file path from the command-line arguments
+file_path = sys.argv[1]
 df = pd.read_csv(file_path)
-
 # 定义DCG计算函数
 def dcg(ranks, top_k=11):
     gains = np.power(2, ranks)[:top_k] - 1
@@ -44,15 +50,27 @@ def cosine_similarity(true_ranks, pred_ranks):
     return np.dot(true_vec, pred_vec) / (np.linalg.norm(true_vec) * np.linalg.norm(pred_vec))
 
 # 定义Mean Reciprocal Rank计算函数
+# Define the Mean Reciprocal Rank (MRR) calculation function
 def mean_reciprocal_rank(true_ranks, pred_ranks):
+    # Sort pred_ranks and get the sorted indices to determine the predicted rank order
+    sorted_pred_indices = np.argsort(pred_ranks)
     reciprocal_ranks = []
-    for i, true_rank in enumerate(true_ranks):
-        rank = np.where(pred_ranks == true_rank)[0]
-        if len(rank) > 0:
-            reciprocal_ranks.append(1 / (rank[0] + 1))
+
+    # Iterate through each true rank and find its position in the sorted predictions
+    for true_rank in true_ranks:
+        # Find where each true_rank appears within the sorted prediction
+        rank_position = np.where(sorted_pred_indices == (true_rank - 1))[0]
+        
+        # If the rank_position is found, compute the reciprocal rank
+        if rank_position.size > 0:
+            reciprocal_ranks.append(1 / (rank_position[0] + 1))
         else:
-            reciprocal_ranks.append(0)
+            reciprocal_ranks.append(0)  # If true_rank is not in sorted_pred_indices
+
+    # Compute and return the mean of all reciprocal ranks
     return np.mean(reciprocal_ranks)
+
+
 
 # 中心化user_id和theta
 def centerize_ranks(df):
@@ -75,21 +93,23 @@ for origin_id in df['origin_id'].unique():
     group_data = df[df['origin_id'] == origin_id]
     true_ranks = group_data['centerized_user_id'].values
     pred_ranks = group_data['centerized_theta'].values
-    print(f"Origin ID: {origin_id}")
-    print(f"True Ranks: {true_ranks}")
-    print(f"Pred Ranks: {pred_ranks}")
+    #print(f"Origin ID: {origin_id}")
+    #print(f"True Ranks: {true_ranks}")
+    #print(f"Pred Ranks: {pred_ranks}")
 
     ndcg_score = ndcg(true_ranks, pred_ranks, top_k=11)
     ndcgs.append(ndcg_score)
-
+#
     ktd = kendall_tau_distance(true_ranks, pred_ranks)
     kendall_tau_distances.append(ktd)
-
+#
     srho = spearman_rho(true_ranks, pred_ranks)
     spearman_rhos.append(srho)
-
+#
     cos_sim = cosine_similarity(true_ranks, pred_ranks)
     cosine_similarities.append(cos_sim)
+
+    #print(true_ranks, pred_ranks)
 
     mrr = mean_reciprocal_rank(true_ranks, pred_ranks)
     mean_reciprocal_ranks.append(mrr)
@@ -102,8 +122,24 @@ average_cos_sim = np.mean(cosine_similarities)
 average_mrr = np.mean(mean_reciprocal_ranks)
 
 # 打印平均公平性指标
+print("filename: ", file_path)
 print("Average NDCG Higher is better :", average_ndcg)
 print("Average Kendall Tau Distance Lower is better:", average_ktd)
 print("Average Spearman's Rank Correlation Coefficient Higher is better:", average_srho)
 print("Average Cosine Similarity Higher is better  :", average_cos_sim)
 print("Average Mean Reciprocal Rank Higher is better:", average_mrr)
+
+#将结果存入文件，路径按照file_path中的v_abilities_parameters.csv的同级目录
+with open(file_path.replace("v_ability_parameters.csv", "fairness_score.txt"), "w") as f:
+    f.write("Average NDCG: %.6f\n" % average_ndcg)
+    f.write("Average Kendall Tau Distance: %.6f\n" % average_ktd)
+    f.write("Average Spearman's Rank Correlation Coefficient: %.6f\n" % average_srho)
+    f.write("Average Cosine Similarity: %.6f\n" % average_cos_sim)
+    f.write("Average Mean Reciprocal Rank: %.6f\n" % average_mrr)
+
+'''True Ranks: [ 1  2  3  4  5  6  7  8  9 10 11]
+Pred Ranks: [ 5  7  4  8  2  9  3  6 10 11  1]
+True Ranks: [ 1  2  3  4  5  6  7  8  9 10 11]
+Pred Ranks: [ 5  4  8  7  9  6  1  2  3 10 11]
+True Ranks: [ 1  2  3  4  5  6  7  8  9 10 11]
+Pred Ranks: [ 4  6  1  3  5 10  9  8  7 11  2]'''

@@ -40,10 +40,14 @@ model.load("irt_model.pth")
 
 # 评估模型
 auc, accuracy = model.eval(test)
-print("Test AUC: {}, Test Accuracy: {}".format(auc, accuracy))
+print("IRT Test AUC: {}, Test Accuracy: {}".format(auc, accuracy))
 
 
 
 #for name, param in model.irt_net.named_parameters():
  #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
+
+#存入文件，acc和accuracy
+with open("test_acc.txt", "w") as f:
+    f.write("IRT: test auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
