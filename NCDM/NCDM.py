@@ -68,7 +68,7 @@ class NCDM(CDM):
         super(NCDM, self).__init__()
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
 
-    def train(self, train_data, test_data=None, epoch=10, device="cuda", lr=0.002, silence=False):
+    def train(self, train_data, test_data=None, epoch=10, device="cpu", lr=0.002, silence=False):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.train()
         loss_function = nn.BCELoss()
@@ -79,9 +79,9 @@ class NCDM(CDM):
             for batch_data in tqdm(train_data, "Epoch %s" % epoch_i):
                 #print(batch_data)
                 batch_count += 1
-                user_id, item_id, knowledge_emb, y = batch_data
+                origin_id,user_id, item_id, knowledge_emb, y = batch_data
                 user_id: torch.Tensor = user_id.to(device)
-                print(user_id)
+                #print(user_id)
                 #print(user_id[0],user_id[1],user_id[2])
                 item_id: torch.Tensor = item_id.to(device)
                 knowledge_emb: torch.Tensor = knowledge_emb.to(device)
@@ -101,12 +101,12 @@ class NCDM(CDM):
                 auc, accuracy = self.eval(test_data, device=device)
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
 
-    def eval(self, test_data, device="cuda"):
+    def eval(self, test_data, device="cpu"):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
         y_true, y_pred = [], []
         for batch_data in tqdm(test_data, "Evaluating"):
-            user_id, item_id, knowledge_emb, y = batch_data
+            origin_id ,user_id, item_id, knowledge_emb, y = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)
@@ -123,31 +123,32 @@ class NCDM(CDM):
     def load(self, filepath):
         self.ncdm_net.load_state_dict(torch.load(filepath))  # , map_location=lambda s, loc: s
         logging.info("load parameters from %s" % filepath)
-    def extract_user_abilities(self, test_data, device="cuda", weighted=False, filepath="v_ability_parameters.csv"):
+    def extract_user_abilities(self, test_data, device="cpu", weighted=False, filepath="v_ability_parameters.csv"):
         """
         Extract and save student ability parameters (hs) after training, with an option to compute
         weighted abilities based on item difficulty.
-
+    
         :param test_data: DataLoader containing the test data
         :param device: Device to use for computation ('cuda' or 'cpu')
         :param weighted: Whether to use weighted abilities based on item difficulty
-        :return: DataFrame with user_id and their ability score (theta)
+        :return: DataFrame with origin_id, user_id, and their ability score (theta)
         """
         self.ncdm_net = self.ncdm_net.to(device)  # Ensure the model is moved to the correct device
         self.ncdm_net.eval()  # Set the model to evaluation mode
-
+    
         # Prepare to store the results in a dictionary to avoid duplicates
         user_theta_map = {}
-
+    
         for batch_data in test_data:
-            user_id, item_id, knowledge_emb, y = batch_data
+            origin_id, user_id, item_id, knowledge_emb, y = batch_data
+            origin_id = origin_id.cpu().numpy()
             user_id = user_id.to(device)
             item_id = item_id.to(device)
-
+    
             # Extract student embeddings and move to CPU for calculation
             student_embeddings = self.ncdm_net.student_emb(user_id).detach().cpu().numpy()
             stat_emb = torch.sigmoid(torch.tensor(student_embeddings)).numpy()  # hs
-
+    
             # Compute the scalar ability for each student
             if weighted:
                 # Use item difficulty to compute weighted ability
@@ -158,18 +159,22 @@ class NCDM(CDM):
             else:
                 # Simply use the average of the ability vector
                 theta = np.mean(stat_emb, axis=1)
-
+    
             # Update user_theta_map to ensure unique user_id and theta
-            for uid, ability in zip(user_id.cpu().numpy(), theta):
-                if uid in user_theta_map:
+            for oid, uid, ability in zip(origin_id, user_id.cpu().numpy(), theta):
+                adjusted_uid = uid + 1  # Adjust user_id to start from 1
+                adjusted_oid = oid + 1  # Adjust origin_id to match correct indexing
+                if adjusted_uid in user_theta_map:
                     # If user_id already exists, you can choose to average, max, or replace the theta
-                    user_theta_map[uid] = (user_theta_map[uid] + ability) / 2  # Example: averaging the abilities
+                    user_theta_map[adjusted_uid] = (user_theta_map[adjusted_uid][0], 
+                                                    (user_theta_map[adjusted_uid][1] + ability) / 2)  # Example: averaging
                 else:
-                    user_theta_map[uid] = ability
+                    user_theta_map[adjusted_uid] = (adjusted_oid, ability)
 
-        # Create a DataFrame with user_id and theta (ability score)
-        df = pd.DataFrame(user_theta_map.items(), columns=['user_id', 'theta'])
-
+        # Create a DataFrame with origin_id, user_id, and theta (ability score)
+        df = pd.DataFrame([(uid, oid, theta) for uid, (oid, theta) in user_theta_map.items()], 
+                          columns=['user_id', 'origin_id', 'theta'])
+    
         # Save the DataFrame to a CSV file
         df.sort_values(by="user_id", inplace=True)
         df.to_csv(filepath, index=False)

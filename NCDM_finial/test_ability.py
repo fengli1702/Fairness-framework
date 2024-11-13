@@ -51,7 +51,7 @@ def get_available_gpus(limit=2):
         os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Default to CPU if GPU query fails
 
 # Call the function at the start of your script
-get_available_gpus(limit=2)
+#get_available_gpus(limit=2)
 
 # Your NCDM model and training code goes here
 
@@ -99,14 +99,14 @@ train_set, valid_set, test_set = [
 
 logging.getLogger().setLevel(logging.INFO)
 cdm = NCDM(knowledge_n, item_n, user_n)
-cdm.train(train_set, valid_set, epoch=1, device="cuda")
-print("train finished")
-cdm.save("ncdm.snapshot")
-print("save finished")
+#cdm.train(train_set, valid_set, epoch=0, device="cpu")
+#print("train finished")
+#cdm.save("ncdm.snapshot")
+#print("save finished")
 cdm.load("ncdm.snapshot")
-print("load finished")
-auc, accuracy = cdm.eval(test_set)
-print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
+#print("load finished")
+#auc, accuracy = cdm.eval(test_set)
+#print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 cdm.extract_user_abilities(train_set, weighted=False, filepath="v_ability_parameters.csv")
 

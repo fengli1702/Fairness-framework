@@ -119,7 +119,7 @@ class NCDM(CDM):
                 num=0
                 #下面是计算theta误差，大循环是对每一个group，小循环是对group的每个人的每一维度能力的pairloss，最后去平均
                 for i in range(len(pair_id)):
-                    if random.random() < 3/4:
+                    if random.random() < 4/5:
                         continue
                     num=num+1
                     group_user_ids = pair_id_tensor[i]  # Get user IDs for the current group
@@ -136,7 +136,7 @@ class NCDM(CDM):
                     sampled_user_ids = targets_reshaped[:, sampled_user_indices]  # Sampled targets for fairness loss
 
                     # Randomly sample 1/3 of the dimensions for fairness calculation
-                    sampled_dimensions = torch.randperm(num_dimensions)[:num_dimensions // 4]
+                    sampled_dimensions = torch.randperm(num_dimensions)[:num_dimensions // 8]
 
                     # Initialize a list to store fairness loss for each dimension
                     losses_per_dimension = []
@@ -161,14 +161,20 @@ class NCDM(CDM):
                 if num != 0:
                     loss_theta = loss_theta / num
                 else:
-                    loss_theta = 0
+                    loss_theta = torch.tensor(0.0, device=device)
+
                 loss_score = loss_score.mean()
 
                 # Final combined loss calculation
                 loss = (1 - self.zeta) * loss_score + self.zeta * loss_theta
                 loss = loss.mean()
-                epoch_score_losses.append(loss_score.mean().item())
-                epoch_fairness_losses.append(loss_theta.mean().item())
+                epoch_score_losses.append(loss_score.item())
+                #print(type(loss_theta))
+                epoch_fairness_losses.append(loss_theta.item())
+                #print(type(epoch_fairness_losses[0]))# <class 'list'>
+                #print(type(loss_theta))# <class 'torch.Tensor'>
+                #print(type(loss_score))# <class 'torch.Tensor'>
+                #print(type(epoch_score_losses[0]))# <class 'list'>
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -176,9 +182,10 @@ class NCDM(CDM):
 
                 epoch_losses.append(loss.mean().item())
 
-            print("[Epoch %d] average loss: %.6f, score loss: %d ,fairness loss: %d" 
-                  % (epoch_i, float(np.mean(epoch_losses)), float(np.mean(epoch_score_losses)), 
-                     float(np.mean(epoch_fairness_losses))))
+            print("[Epoch %d] average loss: %.6f, score loss: %.6f ,fairness loss: %.6f" 
+                  % (epoch_i, float(np.mean(epoch_losses)), float(np.mean(epoch_score_losses)),
+                   float(np.mean(epoch_fairness_losses)    
+                  )))
 
         if test_data is not None:
             auc, accuracy = self.eval(test_data, device=device)
@@ -198,7 +205,7 @@ class NCDM(CDM):
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)
-            pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb)
+            pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb, False)
             y: torch.Tensor = y.to(device)
             loss = loss_function(pred, y)
             losses.append(loss.mean().item())
@@ -218,31 +225,32 @@ class NCDM(CDM):
         self.ncdm_net.load_state_dict(torch.load(filepath, weights_only=True))
         logging.info("load parameters from %s" % filepath)
 
-    def extract_user_abilities(self, test_data, device="cuda", weighted=False, filepath="v_ability_parameters.csv"):
+    def extract_user_abilities(self, test_data, device="cpu", weighted=False, filepath="v_ability_parameters.csv"):
         """
         Extract and save student ability parameters (hs) after training, with an option to compute
         weighted abilities based on item difficulty.
-
+    
         :param test_data: DataLoader containing the test data
         :param device: Device to use for computation ('cuda' or 'cpu')
         :param weighted: Whether to use weighted abilities based on item difficulty
-        :return: DataFrame with user_id and their ability score (theta)
+        :return: DataFrame with origin_id, user_id, and their ability score (theta)
         """
         self.ncdm_net = self.ncdm_net.to(device)  # Ensure the model is moved to the correct device
         self.ncdm_net.eval()  # Set the model to evaluation mode
-
+    
         # Prepare to store the results in a dictionary to avoid duplicates
         user_theta_map = {}
-
+    
         for batch_data in test_data:
             origin_id, user_id, item_id, knowledge_emb, y = batch_data
+            origin_id = origin_id.cpu().numpy()
             user_id = user_id.to(device)
             item_id = item_id.to(device)
-
+    
             # Extract student embeddings and move to CPU for calculation
             student_embeddings = self.ncdm_net.student_emb(user_id).detach().cpu().numpy()
             stat_emb = torch.sigmoid(torch.tensor(student_embeddings)).numpy()  # hs
-
+    
             # Compute the scalar ability for each student
             if weighted:
                 # Use item difficulty to compute weighted ability
@@ -253,18 +261,22 @@ class NCDM(CDM):
             else:
                 # Simply use the average of the ability vector
                 theta = np.mean(stat_emb, axis=1)
-
+    
             # Update user_theta_map to ensure unique user_id and theta
-            for uid, ability in zip(user_id.cpu().numpy(), theta):
-                if uid in user_theta_map:
+            for oid, uid, ability in zip(origin_id, user_id.cpu().numpy(), theta):
+                adjusted_uid = uid + 1  # Adjust user_id to start from 1
+                adjusted_oid = oid + 1  # Adjust origin_id to match correct indexing
+                if adjusted_uid in user_theta_map:
                     # If user_id already exists, you can choose to average, max, or replace the theta
-                    user_theta_map[uid] = (user_theta_map[uid] + ability) / 2  # Example: averaging the abilities
+                    user_theta_map[adjusted_uid] = (user_theta_map[adjusted_uid][0], 
+                                                    (user_theta_map[adjusted_uid][1] + ability) / 2)  # Example: averaging
                 else:
-                    user_theta_map[uid] = ability
+                    user_theta_map[adjusted_uid] = (adjusted_oid, ability)
 
-        # Create a DataFrame with user_id and theta (ability score)
-        df = pd.DataFrame(user_theta_map.items(), columns=['user_id', 'theta'])
-
+        # Create a DataFrame with origin_id, user_id, and theta (ability score)
+        df = pd.DataFrame([(uid, oid, theta) for uid, (oid, theta) in user_theta_map.items()], 
+                          columns=['user_id', 'origin_id', 'theta'])
+    
         # Save the DataFrame to a CSV file
         df.sort_values(by="user_id", inplace=True)
         df.to_csv(filepath, index=False)
