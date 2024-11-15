@@ -201,7 +201,7 @@ class NCDM(CDM):
         
         y_true, y_pred = [], []
         for batch_data in tqdm(test_data, "Evaluating"):
-            origin_id, user_id, item_id, knowledge_emb, y = batch_data
+            user_id, item_id, knowledge_emb, y = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
             knowledge_emb: torch.Tensor = knowledge_emb.to(device)

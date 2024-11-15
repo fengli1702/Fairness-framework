@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 
 train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
 valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-test_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
+test_data = pd.read_csv("../data/a0910/test.csv")
 
 batch_size = 256
 

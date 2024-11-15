@@ -2,7 +2,7 @@
 # 2021/4/1 @ WangFei
 import logging
 #from EduCDM import NCDM
-from NCDM import NCDM
+from myNCDM import NCDM
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
@@ -51,14 +51,14 @@ def get_available_gpus(limit=2):
         os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Default to CPU if GPU query fails
 
 # Call the function at the start of your script
-#get_available_gpus(limit=2)
+get_available_gpus(limit=2)
 
 # Your NCDM model and training code goes here
 
 
 train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
-test_data = pd.read_csv("../data/a0910/virtual_user_test_data.csv")
+valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
+test_data = pd.read_csv("../data/a0910/test.csv")
 df_item = pd.read_csv("../data/a0910/item.csv")
 
 item2knowledge = {}
@@ -68,7 +68,8 @@ for i, s in df_item.iterrows():
     item2knowledge[item_id] = knowledge_codes
     knowledge_set.update(knowledge_codes)
 
-batch_size = 32
+batch_size = 64
+
 user_n = np.max(train_data['user_id'])
 item_n = np.max([np.max(train_data['item_id']), np.max(valid_data['item_id']), np.max(test_data['item_id'])])
 knowledge_n = np.max(list(knowledge_set))
@@ -89,18 +90,39 @@ def transform(origin_id, user, item, item2knowledge, score, batch_size):
     return DataLoader(data_set, batch_size=batch_size, shuffle=True)
 
 
-train_set, valid_set, test_set = [
+train_set= [
     transform(data["origin_id"],data["user_id"], data["item_id"], item2knowledge, data["score"], batch_size)
-    for data in [train_data, valid_data, test_data]
+    for data in [train_data]
 ]
 
+def transform2(user, item, item2knowledge, score, batch_size):
+    knowledge_emb = torch.zeros((len(item), knowledge_n))
+    for idx in range(len(item)):
+        knowledge_emb[idx][np.array(item2knowledge[item[idx]]) - 1] = 1.0
+
+    data_set = TensorDataset(
+        torch.tensor(user, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
+        torch.tensor(item, dtype=torch.int64) - 1,  # (1, item_n) to (0, item_n-1)
+        knowledge_emb,
+        torch.tensor(score, dtype=torch.float32)
+    )
+    return DataLoader(data_set, batch_size=batch_size, shuffle=True)
+
+valid_set,test_set= [
+    transform2(data["user_id"], data["item_id"], item2knowledge, data["score"], batch_size)
+    for data in [valid_data,test_data]
+]
 logging.getLogger().setLevel(logging.INFO)
 cdm = NCDM(knowledge_n, item_n, user_n)
-cdm.train(train_set, valid_set, epoch=0, device="cpu")
+cdm.train(train_set, valid_set, epoch=10, device="cuda")
+print("train finished")
 cdm.save("ncdm.snapshot")
-
+print("save finished")
 cdm.load("ncdm.snapshot")
+print("load finished")
 auc, accuracy = cdm.eval(test_set)
 print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 cdm.extract_user_abilities(train_set, weighted=False, filepath="v_ability_parameters.csv")
+
+

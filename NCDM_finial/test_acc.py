@@ -2,7 +2,7 @@
 # 2021/4/1 @ WangFei
 import logging
 #from EduCDM import NCDM
-from NCDM import NCDM
+from myNCDM import NCDM
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
@@ -57,7 +57,7 @@ def get_available_gpus(limit=2):
 
 
 train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-valid_data = pd.read_csv("../data/a0910/virtual_user_valid_data.csv")
+valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
 test_data = pd.read_csv("../data/a0910/test.csv")
 df_item = pd.read_csv("../data/a0910/item.csv")
 
@@ -80,6 +80,7 @@ def transform(user, item, item2knowledge, score, batch_size):
         knowledge_emb[idx][np.array(item2knowledge[item[idx]]) - 1] = 1.0
 
     data_set = TensorDataset(
+       
         torch.tensor(user, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
         torch.tensor(item, dtype=torch.int64) - 1,  # (1, item_n) to (0, item_n-1)
         knowledge_emb,

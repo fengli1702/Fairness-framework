@@ -1,0 +1,1 @@
+IRT_finial : test auc: 0.659234, accuracy: 0.670247

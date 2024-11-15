@@ -58,7 +58,7 @@ def get_available_gpus(limit=2):
 
 train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
 valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-test_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
+test_data = pd.read_csv("../data/a0910/test.csv")
 df_item = pd.read_csv("../data/a0910/item.csv")
 
 item2knowledge = {}
@@ -90,23 +90,36 @@ def transform(origin_id, user, item, item2knowledge, score, batch_size):
     return DataLoader(data_set, batch_size=batch_size, shuffle=True)
 
 
-train_set, valid_set, test_set = [
+train_set, valid_set= [
     transform(data["origin_id"],data["user_id"], data["item_id"], item2knowledge, data["score"], batch_size)
-    for data in [train_data, valid_data, test_data]
+    for data in [train_data, valid_data]
 ]
 
+def transform2(user, item, item2knowledge, score, batch_size):
+    knowledge_emb = torch.zeros((len(item), knowledge_n))
+    for idx in range(len(item)):
+        knowledge_emb[idx][np.array(item2knowledge[item[idx]]) - 1] = 1.0
 
+    data_set = TensorDataset(
+        torch.tensor(user, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
+        torch.tensor(item, dtype=torch.int64) - 1,  # (1, item_n) to (0, item_n-1)
+        knowledge_emb,
+        torch.tensor(score, dtype=torch.float32)
+    )
+    return DataLoader(data_set, batch_size=batch_size, shuffle=True)
+
+test_set = transform2(test_data["user_id"], test_data["item_id"], item2knowledge, test_data["score"], batch_size)
 
 logging.getLogger().setLevel(logging.INFO)
 cdm = NCDM(knowledge_n, item_n, user_n)
-#cdm.train(train_set, valid_set, epoch=0, device="cpu")
-#print("train finished")
-#cdm.save("ncdm.snapshot")
-#print("save finished")
+cdm.train(train_set, valid_set, epoch=0, device="cpu")
+print("train finished")
+cdm.save("ncdm.snapshot")
+print("save finished")
 cdm.load("ncdm.snapshot")
-#print("load finished")
-#auc, accuracy = cdm.eval(test_set)
-#print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
+print("load finished")
+auc, accuracy = cdm.eval(test_set)
+print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 cdm.extract_user_abilities(train_set, weighted=False, filepath="v_ability_parameters.csv")
 

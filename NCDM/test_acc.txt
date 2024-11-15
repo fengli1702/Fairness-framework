@@ -1,0 +1,1 @@
+NCDM_finial : test auc: 0.500000, accuracy: 0.654322
