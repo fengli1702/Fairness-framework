@@ -30,7 +30,7 @@ def flip_down(scores, num_flips):
 
 # 初始化所有虚拟数据
 all_virtual_scores = []
-virtual_user_counter = 0  # 用于生成新的虚拟 user_id
+virtual_user_counter = 0+12465  # 用于生成新的虚拟 user_id
 
 # 遍历所有真实用户
 for real_user_id in real_user_ids:
@@ -41,18 +41,21 @@ for real_user_id in real_user_ids:
     # 保留一个原始的用户分数向量用于后续操作
     current_upward_scores = user_scores.copy()
     half_len = len(user_items) // 2
-    virtual_user_counter+=5
+    user_items = user_items[:half_len]  # 只保留一半的 item
+    user_scores = user_scores[:half_len]  # 只保留一半的 score
 
-    for i in range(5, 0, -1):
+    virtual_user_counter+=2
+
+    for i in range(2, 0, -1):
         # Flip only the second half of the scores
-        current_upward_scores[:half_len] = flip_up(current_upward_scores[:half_len], random.randint(1, 3))
+        current_upward_scores = flip_up(current_upward_scores, random.randint(1, 2))
         all_virtual_scores.extend([
             [real_user_id, virtual_user_counter, item, score]
             for item, score in zip(user_items, current_upward_scores)
         ])
         virtual_user_counter -= 1
 
-    virtual_user_counter += 6
+    virtual_user_counter += 3
 
     # 添加真实用户
     all_virtual_scores.extend([
@@ -65,8 +68,8 @@ for real_user_id in real_user_ids:
     current_downward_scores = user_scores.copy()
 
     # 生成5个单调向下的虚拟用户 (flip only the second half)
-    for i in range(5):
-        current_downward_scores[:half_len] = flip_down(current_downward_scores[:half_len], random.randint(1, 3))
+    for i in range(2):
+        current_downward_scores = flip_down(current_downward_scores, random.randint(1, 2))
         all_virtual_scores.extend([
             [real_user_id, virtual_user_counter, item, score]
             for item, score in zip(user_items, current_downward_scores)
@@ -76,7 +79,9 @@ for real_user_id in real_user_ids:
     virtual_user_counter -= 1
 
 # After generating all virtual user data
+
 df_all_virtual_scores = pd.DataFrame(all_virtual_scores, columns=["origin_id", "user_id", "item_id", "score"])
+df_all_virtual_scores['is_train'] = 0
 
 # Sort by virtual_user_id before saving
 df_all_virtual_scores = df_all_virtual_scores.sort_values(by=['user_id'])
