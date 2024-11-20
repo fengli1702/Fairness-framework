@@ -63,7 +63,7 @@ class IRT(CDM):
         super(IRT, self).__init__()
         self.irt_net = IRTNet(user_num, item_num, value_range, a_range) #实例化IRTNet类
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cpu", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.001) -> ...:
         self.irt_net = self.irt_net.to(device)
         loss_function = nn.BCELoss()  #二分类交叉熵作为损失函数
 

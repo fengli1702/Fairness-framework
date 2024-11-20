@@ -9,17 +9,18 @@ from scipy.stats import spearmanr
 import sys
 
 # Check if a file path argument was provided
+
 # Read the file path from the command-line arguments
 file_path = "v_ability_parameters.csv"
 df = pd.read_csv(file_path)
 # 定义DCG计算函数
-def dcg(ranks, top_k=11):
+def dcg(ranks, top_k=9):
     gains = np.power(2, ranks)[:top_k] - 1
     discounts = np.log2(np.arange(2, top_k + 2))
     return np.sum(gains / discounts)
 
 # 定义NDCG计算函数
-def ndcg(true_ranks, pred_ranks, top_k=11):
+def ndcg(true_ranks, pred_ranks, top_k=9):
     dcg_true = dcg(np.argsort(true_ranks), top_k)
     dcg_pred = dcg(np.argsort(pred_ranks), top_k)
     idcg_true = dcg(np.arange(1, top_k + 1), top_k)
@@ -92,7 +93,7 @@ for origin_id in df['origin_id'].unique():
     #print(f"True Ranks: {true_ranks}")
     #print(f"Pred Ranks: {pred_ranks}")
 
-    ndcg_score = ndcg(true_ranks, pred_ranks, top_k=11)
+    ndcg_score = ndcg(true_ranks, pred_ranks, top_k=9)
     ndcgs.append(ndcg_score)
 #
     ktd = kendall_tau_distance(true_ranks, pred_ranks)

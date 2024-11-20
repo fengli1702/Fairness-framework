@@ -1,1 +1,1 @@
-IRT: test auc: 0.665190, accuracy: 0.673063
+IRT: test auc: 0.648021, accuracy: 0.668311

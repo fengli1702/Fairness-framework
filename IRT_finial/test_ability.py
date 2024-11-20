@@ -7,10 +7,12 @@ import pandas as pd
 from myIRT import IRT
 from sklearn.model_selection import train_test_split
 
-
-train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
+#改全局，只有前半段进入fairloss，
+train_data = pd.read_csv("../data/a0910/merged_virtual.csv")
+valid_data = pd.read_csv("../data/a0910/valid.csv")
 test_data = pd.read_csv("../data/a0910/test.csv")
+
+
 
 batch_size = 256
 
@@ -31,10 +33,10 @@ train, valid, test = [
 
 # 初始化IRT模型
 
-model = IRT(27424, 17747)
+model = IRT(44875, 17747)
 
 # 训练模型
-model.train(train, valid, epoch=10 )
+model.train(train, valid, epoch=10)
 
 # 保存模型
 model.save("irt_model.pth")
@@ -46,13 +48,16 @@ model.load("irt_model.pth")
 auc, accuracy = model.eval(test)
 print("Test AUC: {}, Test Accuracy: {}".format(auc, accuracy))
 
+#存入文件，acc和accuracy
+with open("test_acc.txt", "w") as f:
+    f.write("IRT_finial : test auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
 
 #for name, param in model.irt_net.named_parameters():
  #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
 
 
-all_virtual_user_data = pd.read_csv('../data/a0910/all_virtual_user_data.csv')
+all_virtual_user_data = pd.read_csv('../data/a0910/test_virtual.csv')
 
 # Transform function to include origin_id
 def transform2(x, y, z, origin_ids, batch_size, **params):
@@ -75,14 +80,3 @@ test_fairness = transform2(
 
 # Assuming `model` is your IRT model instance
 model.extract_ability_parameters(test_data=test_fairness, filepath="v_ability_parameters.csv")
-
-
-#theta_params = model.irt_net.theta.weight.data.cpu().numpy()
-#a_params = model.irt_net.a.weight.data.cpu().numpy()
-#b_params = model.irt_net.b.weight.data.cpu().numpy()
-#c_params = model.irt_net.c.weight.data.cpu().numpy()
-#
-#print("Theta parameters (user abilities):", theta_params)
-#print("a parameters (item discriminations):", a_params)
-#print("b parameters (item difficulties):", b_params)
-#print("c parameters (guessing parameters):", c_params)
