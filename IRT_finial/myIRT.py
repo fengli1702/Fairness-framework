@@ -59,7 +59,7 @@ class IRTNet(nn.Module):
         return irt3pl(theta, a, b, c, F=torch, **kwargs) 
 
 class IRT(CDM):
-    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.7 , group_size = 9):
+    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.8 , group_size = 9):
         super(IRT, self).__init__()
         self.irt_net = IRTNet(user_num, item_num, value_range, a_range)
         self.use_fairness = use_fairness
@@ -91,7 +91,7 @@ class IRT(CDM):
 
                 # 获得 user 的 group，仅筛选满足条件的 user_id
                 pair_id = []  # Batch 内所有用户的分组
-                valid_user_indices = (user_id < 12465)  # 筛选 user_id < 12465 的用户
+                valid_user_indices = (user_id < 22437)  # 筛选 user_id < 12465 的用户
                 filtered_user_id = user_id[valid_user_indices]  # 筛选后的 user_id
 
                 for i in range(filtered_user_id.size(0)):
@@ -122,7 +122,9 @@ class IRT(CDM):
 
                             # Reshape targets_rank as needed for fairness loss calculation
                             targets_reshaped = group_user_ids.view(1, -1)
-
+                            
+                            #print("predictions_reshaped:",predictions_reshaped)
+                            #print("targets_reshaped:",targets_reshaped)
                             # Calculate the fairness loss for the current group
                             fairness_loss_val = self.fairness_loss(predictions_reshaped, targets_reshaped)
 

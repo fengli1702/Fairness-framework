@@ -32,7 +32,7 @@ train, valid, test = [
 # 初始化IRT模型
 
 model = IRT(44875, 17747)
-
+#44874
 # 训练模型
 model.train(train, valid, epoch=10)
 

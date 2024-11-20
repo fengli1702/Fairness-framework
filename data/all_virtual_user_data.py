@@ -30,32 +30,34 @@ def flip_down(scores, num_flips):
 
 # 初始化所有虚拟数据
 all_virtual_scores = []
-virtual_user_counter = 0 + 22437 # 用于生成新的虚拟 user_id
+virtual_user_counter = 0+22437  # 用于生成新的虚拟 user_id
 
 # 遍历所有真实用户
 for real_user_id in real_user_ids:
     user_data = train_data[train_data['user_id'] == real_user_id]
     user_items = user_data['item_id'].values
     user_scores = user_data['score'].values
+    item_len = len(user_items)/2
+    #将数据集划分为item前一半和后一半
+    user_items = user_items[int(item_len):]
+    user_scores = user_scores[int(item_len):]
+
 
     # 保留一个原始的用户分数向量用于后续操作
     current_upward_scores = user_scores.copy()
-    half_len = len(user_items) // 2
-    user_items = user_items[half_len:]  # 只保留一半的 item
-    user_scores = user_scores[half_len:]  # 只保留一半的 score
 
     virtual_user_counter+=4
 
+    # Reverse the order of storing for upward flips
     for i in range(4, 0, -1):
-        # Flip only the second half of the scores
-        current_upward_scores = flip_up(current_upward_scores, random.randint(1, 2))
+        current_upward_scores = flip_up(current_upward_scores, random.randint(1, 3))
         all_virtual_scores.extend([
             [real_user_id, virtual_user_counter, item, score]
             for item, score in zip(user_items, current_upward_scores)
         ])
         virtual_user_counter -= 1
 
-    virtual_user_counter += 5
+    virtual_user_counter+=5
 
     # 添加真实用户
     all_virtual_scores.extend([
@@ -67,9 +69,9 @@ for real_user_id in real_user_ids:
     # 保留一个原始的用户分数向量用于后续操作
     current_downward_scores = user_scores.copy()
 
-    # 生成5个单调向下的虚拟用户 (flip only the second half)
+    # 生成5个单调向下的虚拟用户
     for i in range(4):
-        current_downward_scores = flip_down(current_downward_scores, random.randint(1, 2))
+        current_downward_scores = flip_down(current_downward_scores, random.randint(1, 3))
         all_virtual_scores.extend([
             [real_user_id, virtual_user_counter, item, score]
             for item, score in zip(user_items, current_downward_scores)
@@ -79,9 +81,8 @@ for real_user_id in real_user_ids:
     virtual_user_counter -= 1
 
 # After generating all virtual user data
-
 df_all_virtual_scores = pd.DataFrame(all_virtual_scores, columns=["origin_id", "user_id", "item_id", "score"])
-df_all_virtual_scores['is_train'] = 0
+df_all_virtual_scores["is_train"] = 0
 
 # Sort by virtual_user_id before saving
 df_all_virtual_scores = df_all_virtual_scores.sort_values(by=['user_id'])
@@ -89,6 +90,4 @@ df_all_virtual_scores = df_all_virtual_scores.sort_values(by=['user_id'])
 # Save the sorted data to the CSV file
 df_all_virtual_scores.to_csv('./a0910/test_virtual.csv', index=False)
 
-
 print('All virtual scores saved to all_virtual_user_data.csv in sorted order by virtual_user_id')
-

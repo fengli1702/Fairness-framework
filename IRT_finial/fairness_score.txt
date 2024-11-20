@@ -1,5 +1,5 @@
-Average NDCG: 0.692537
-Average Kendall Tau Distance: 15.953470
-Average Spearman's Rank Correlation Coefficient: 0.150181
-Average Cosine Similarity: 0.750053
+Average NDCG: 0.682117
+Average Kendall Tau Distance: 15.312876
+Average Spearman's Rank Correlation Coefficient: 0.197346
+Average Cosine Similarity: 0.763925
 Average Mean Reciprocal Rank: 0.314330
