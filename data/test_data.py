@@ -1,81 +1,89 @@
 import pandas as pd
 
 # 读取数据文件
-data = pd.read_csv("./a0910/train_virtual.csv")
+data = pd.read_csv("./a0910/train_with_groups_and_fairness_strict.csv")
 
-# 获取前100个不同的 origin_id
-unique_origin_ids = data["origin_id"].unique()[:100]
+def check_fairnessid_order(group_data, max_group_size=10):
+    """
+    检查 group 内用户是否按照 fairnessid 强排序，并检查用户数量是否超限。
+    """
+    # 按 fairness_id 排序
+    sorted_group = group_data.sort_values("fairness_id")
+    user_ids = sorted_group["user_id"].unique().tolist()  # 只保留唯一用户
 
-# 检查每个 virtual_user_id 对应的 item_id 的 score 是否满足条件
-def check_scores(group_data):
-    virtual_user_ids = group_data["user_id"].unique()
-    for i in range(len(virtual_user_ids) - 1):
-        for j in range(i + 1, len(virtual_user_ids)):
-            user_i_scores = group_data[group_data["user_id"] == virtual_user_ids[i]][["item_id", "score"]]
-            user_j_scores = group_data[group_data["user_id"] == virtual_user_ids[j]][["item_id", "score"]]
-            
-            # 检查 user_i 的每个 item_id 的 score 是否大于等于 user_j 的相同 item_id 的 score
-            for _, row in user_i_scores.iterrows():
-                item_id = row["item_id"]
-                score_i = row["score"]
-                score_j = user_j_scores[user_j_scores["item_id"] == item_id]["score"].values
-                if len(score_j) > 0 and score_i < score_j[0]:
-                    return False, virtual_user_ids[i], virtual_user_ids[j], item_id
+    item_scores = {
+        user_id: sorted_group[sorted_group["user_id"] == user_id][["item_id", "score"]]
+        for user_id in user_ids
+    }
+
+    # 遍历用户对，检查强排序条件
+    for i in range(len(user_ids) - 1):
+        user_i = user_ids[i]
+        user_j = user_ids[i + 1]
+
+        scores_i = item_scores[user_i]
+        scores_j = item_scores[user_j]
+
+        # 获取两用户的共同题目
+        common_items = set(scores_i["item_id"]).intersection(set(scores_j["item_id"]))
+        if not common_items:
+            continue  # 无共同题目，跳过检查
+
+        # 筛选共同题目的分数并对齐索引
+        common_scores_i = scores_i[scores_i["item_id"].isin(common_items)].set_index("item_id")["score"]
+        common_scores_j = scores_j[scores_j["item_id"].isin(common_items)].set_index("item_id")["score"]
+        common_scores_i = common_scores_i.reindex(sorted(common_items))
+        common_scores_j = common_scores_j.reindex(sorted(common_items))
+
+        # 比较分数，检查是否满足强排序
+        if not (all(common_scores_i >= common_scores_j) or all(common_scores_i <= common_scores_j)):
+            # 如果不满足强排序条件，返回错误信息
+            return False, user_i, user_j, list(common_items)
+
+    # 检查 group 是否超过最大长度限制
+    if len(user_ids) > max_group_size:
+        return False, None, None, "Group size exceeds maximum length"
+    if len(user_ids) < max_group_size:
+        return False, None, None, "Group size less than maximum length"
+    if len(user_ids) < 5:
+        global count_none
+        count_none += 1
     return True, None, None, None
 
-# 打印不满足条件的详细信息
-def print_unsorted_group_details(origin_id, group_number, user_id, next_user_id, item_id):
-    print(f"Origin ID: {origin_id}, Group {group_number}, 用户 {user_id} 和 {next_user_id} 在 item_id {item_id} 上不满足条件")
 
-# 遍历前100个不同的 origin_id
-group_number = 1
-for origin_id in unique_origin_ids:
-    # 获取当前 origin_id 对应的所有数据
-    origin_data = data[data["origin_id"] == origin_id]
+# 打印检测结果
+count_none = 0
+count = 0
+def print_group_check_details(group_id, user_id, next_user_id, issue):
     
-    # 获取所有 unique 的 virtual_user_id
-    unique_virtual_user_ids = origin_data["user_id"].unique()
-    
-    # 按每11个 virtual_user_id 一组进行检查
-    for i in range(0, len(unique_virtual_user_ids), 11):
-        group_virtual_user_ids = unique_virtual_user_ids[i:i+11]
-        group_data = origin_data[origin_data["user_id"].isin(group_virtual_user_ids)]
-        
-        # 检查每个 virtual_user_id 对应的 item_id 的 score 是否满足条件
-        is_strictly_ordered, user_id, next_user_id, item_id = check_scores(group_data)
-        if is_strictly_ordered:
-            print(f"Origin ID: {origin_id}, Group {group_number}, 用户分数严格排序")
+    if issue == "Group size exceeds maximum length":
+        #print(f"Group {group_id}: 超过最大长度限制（10人）")
+        pass
+    elif (issue == "Group size less than maximum length"):
+        #print(f"Group {group_id}: 未达到最大长度限制（10人）")
+        global count 
+        count += 1
+    else:
+        print(f"Group {group_id}: 用户 {user_id} 和 {next_user_id} 在共同题目 {issue} 上不满足强排序条件")
+
+# 检测所有 group
+def validate_groups(data, max_group_size=10):
+    """
+    检查所有 group 内用户是否按照 fairnessid 强排序，同时是否满足最大长度限制。
+    """
+    group_ids = data["group_id"].unique()
+    for group_id in group_ids:
+        if group_id == 0:
+            continue  # 跳过未分组用户
+        group_data = data[data["group_id"] == group_id]
+        is_ordered, user_id, next_user_id, issue = check_fairnessid_order(group_data, max_group_size)
+        if is_ordered:
+            print(f"Group {group_id}: 用户分数和排序满足要求")
+            pass
         else:
-            print_unsorted_group_details(origin_id, group_number, user_id, next_user_id, item_id)
-    group_number += 1   
+            print_group_check_details(group_id, user_id, next_user_id, issue)
 
-def compare_rankings(ranking1, ranking2):
-    # 将排名转换为集合
-    set1 = set(ranking1)
-    set2 = set(ranking2)
-    
-    # 计算交集
-    intersection = set1.intersection(set2)
-    similarity = len(intersection) / (len(set1) + len(set2) - len(intersection))  # Jaccard相似度
-    return similarity
-
-
-def display_flipped_scores(file_path, original_user_id):
-    data = pd.read_csv(file_path)
-    
-    # 获取翻转后的分数（假设在虚拟数据文件中）
-    flipped_data = data  
-    for user_id, group in flipped_data.groupby("user_id"):
-        print(f"User ID: {user_id}")
-        print(group[["item_id", "score"]])
-
-
-
-# 比较两个排名
-#ranking1 = [1, 2, 3]
-#ranking2 = [2, 3, 4]
-#similarity_score = compare_rankings(ranking1, ranking2)
-#print(f"两个排名的相似度: {similarity_score:.2f}")
-#
-# 展示翻转效果
-#display_flipped_scores("./data/a0910/virtual_user_data.csv",1615)
+# 执行检测
+validate_groups(data)
+print(count)
+print(count_none)
