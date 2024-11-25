@@ -1,7 +1,7 @@
 import pandas as pd
 
 # 读取数据文件
-data = pd.read_csv("./a0910/train_with_groups_and_fairness_strict.csv")
+data = pd.read_csv("./a0910/expanded_dataset.csv")
 
 def check_fairnessid_order(group_data, max_group_size=10):
     """
@@ -57,10 +57,10 @@ count = 0
 def print_group_check_details(group_id, user_id, next_user_id, issue):
     
     if issue == "Group size exceeds maximum length":
-        #print(f"Group {group_id}: 超过最大长度限制（10人）")
+        print(f"Group {group_id}: 超过最大长度限制（10人）")
         pass
     elif (issue == "Group size less than maximum length"):
-        #print(f"Group {group_id}: 未达到最大长度限制（10人）")
+        print(f"Group {group_id}: 未达到最大长度限制（10人）")
         global count 
         count += 1
     else:
@@ -69,21 +69,22 @@ def print_group_check_details(group_id, user_id, next_user_id, issue):
 # 检测所有 group
 def validate_groups(data, max_group_size=10):
     """
-    检查所有 group 内用户是否按照 fairnessid 强排序，同时是否满足最大长度限制。
+    检查所有 group 内用户是否按照 fairness_id 强排序，同时是否满足最大长度限制。
     """
     group_ids = data["group_id"].unique()
+
     for group_id in group_ids:
+        # 获取该组的用户数据，跳过 fairness_id = 0 的用户
         if group_id == 0:
             continue  # 跳过未分组用户
         group_data = data[data["group_id"] == group_id]
+        # 检查该组是否满足排序和长度要求
         is_ordered, user_id, next_user_id, issue = check_fairnessid_order(group_data, max_group_size)
         if is_ordered:
-            print(f"Group {group_id}: 用户分数和排序满足要求")
             pass
+            #print(f"Group {group_id}: 用户分数和排序满足要求")
         else:
             print_group_check_details(group_id, user_id, next_user_id, issue)
 
 # 执行检测
 validate_groups(data)
-print(count)
-print(count_none)
