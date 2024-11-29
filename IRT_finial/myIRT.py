@@ -79,111 +79,99 @@ class IRT(CDM):
             fairness_losses = []
 
             for batch_data in tqdm(train_data, "Epoch %s" % e):
-                user_id, item_id, response = batch_data
+                # 解包数据
+                user_id, item_id, response, fairness_id, group_id, groupindex, group_size = batch_data
+
+                # 移动数据到设备
                 item_id = item_id.to(device)
                 response = response.to(device)
-                user_id = user_id.to(device)
-                # user_id 是以 0 开始
-                predicted_response = self.irt_net(user_id, item_id, fairness=False)
+                fairness_id = fairness_id.to(device)
+                group_id = group_id.to(device)
+                groupindex = groupindex.to(device)
+                group_size = group_size.to(device)
+
+                # 模型预测，使用 fairness_id 作为输入
+                predicted_response = self.irt_net(fairness_id, item_id, fairness=False)
 
                 # 计算 BCE 损失
                 bce_loss_val = bce_loss(predicted_response, response)
 
-                # 获得 user 的 group，仅筛选满足条件的 user_id
-                pair_id = []  # Batch 内所有用户的分组
-                valid_user_indices = (user_id < 22437)  # 筛选 user_id < 12465 的用户
-                filtered_user_id = user_id[valid_user_indices]  # 筛选后的 user_id
-
-                for i in range(filtered_user_id.size(0)):
-                    group_pair = []
-                    group_index = filtered_user_id[i].item() // self.groupsize
-                    for j in range(self.groupsize):
-                        group_pair.append(j + group_index * self.groupsize)
-                    pair_id.append(group_pair)
-
-                pair_id_tensor = torch.tensor(pair_id, device=device)
-                # 如果启用fairness loss
                 if self.use_fairness:
                     group_fairness_losses = []
-                    if len(filtered_user_id) == 0:
-                        total_fairness_loss = torch.tensor(0.0, device=device)  # 设置公平性损失为 0
-                        loss = bce_loss_val
-                    else:
-                        # Iterate over the batch size (one group at a time)
-                        for i in range(len(batch_data)):
 
-                            group_user_ids = pair_id_tensor[i]  # Get user IDs for the current group
-                            group_user_ids = group_user_ids.to(device)
-                            # Call `self.irt_net` to get predicted_response and theta for this group
-                            theta_group = self.irt_net(group_user_ids, item_id , fairness = True)
+                    # 遍历每个 group，计算公平性损失
+                    unique_groups = torch.unique(group_id)
+                    for gid in unique_groups:
+                        group_mask = (group_id == gid)
 
-                            # Reshape predictions and targets to match FairnessLoss input requirements
-                            predictions_reshaped = theta_group.view(1, -1)  # Reshaping for a single group
+                        if gid == 0:
+                            # group_id = 0 的组跳过公平性损失
+                            continue
+                        
+                        # 获取当前组的起始索引和组大小
+                        group_start = groupindex[group_mask][0].item()  # 当前组的起始索引
+                        group_sz = group_size[group_mask][0].item()     # 当前组的大小
 
-                            # Reshape targets_rank as needed for fairness loss calculation
-                            targets_reshaped = group_user_ids.view(1, -1)
-                            
-                            #print("predictions_reshaped:",predictions_reshaped)
-                            #print("targets_reshaped:",targets_reshaped)
-                            # Calculate the fairness loss for the current group
-                            fairness_loss_val = self.fairness_loss(predictions_reshaped, targets_reshaped)
+                        # 提取当前组的 fairness_id
+                        group_users = [i for i in range(group_start,group_start+group_sz)]  # 组内用户的 fairness_id
+                        
+                        group_users = torch.tensor(group_users, dtype=torch.int64).to(device)
+                        # 获取当前组的 theta 值
+                        theta_group = self.irt_net(group_users, item_id[group_mask], fairness=True)
+                        
+                        # 计算公平性损失
+                        predictions_reshaped = theta_group.view(1, -1)  # 模型预测 theta
+                        targets_reshaped = group_users.view(1, -1)      # 目标 fairness_id
 
-                            # Append the fairness loss for this group to the list
-                            group_fairness_losses.append(fairness_loss_val)
+                        # 公平性损失计算：fairness_id 越低 theta 越高
+                        fairness_loss_val = self.fairness_loss(predictions_reshaped, targets_reshaped)
+                        group_fairness_losses.append(fairness_loss_val)
 
-
-                        # Optionally, average or sum the losses across the batch
-                        total_fairness_loss = torch.mean(torch.stack(group_fairness_losses))  # Or use sum() if you prefer summing
-                        #print("total1:",total_fairness_loss.item())
-                    # 组合两种loss
-                    if len(filtered_user_id) == 0:
-                        loss = bce_loss_val
-                    else:
-                        #print("bce2:",bce_loss_val.item())
-                        #print("total3:",total_fairness_loss.item())
+                    # 合并 BCE 损失与公平性损失
+                    if group_fairness_losses:
+                        total_fairness_loss = torch.mean(torch.stack(group_fairness_losses))
                         loss = (1 - self.fairness_lambda) * bce_loss_val + self.fairness_lambda * total_fairness_loss
-                    
-                    fairness_losses.append(total_fairness_loss.item())
-                
+                        fairness_losses.append(total_fairness_loss.item())
+                    else:
+                        loss = bce_loss_val
                 else:
                     loss = bce_loss_val
 
-                #print("loss:",loss.item())
+                # 优化器更新
                 trainer.zero_grad()
                 loss.backward()
                 trainer.step()
 
+                # 记录损失
                 losses.append(loss.item())
                 bce_losses.append(bce_loss_val.item())
 
-            # 打印训练信息
+            # 打印日志
             log_str = "[Epoch %d] Total Loss: %.6f, BCE Loss: %.6f" % (
                 e, float(np.mean(losses)), float(np.mean(bce_losses)))
             if self.use_fairness:
                 log_str += ", Fairness Loss: %.6f" % float(np.mean(fairness_losses))
             print(log_str)
 
+            # 测试集评估
             if test_data is not None:
                 auc, accuracy = self.eval(test_data, device=device)
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (e, auc, accuracy))
 
-    def eval(self, test_data, device="cuda"):
+    def eval(self, test_data, device="cpu") -> tuple:
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()
         y_pred = []
         y_true = []
+        for batch_data in tqdm(test_data, "evaluating"):
+            user_id, item_id, response, fairness_id, group_id, groupindex, group_size = batch_data
+            fairness_id: torch.Tensor = fairness_id.to(device)
+            item_id: torch.Tensor = item_id.to(device)
+            pred: torch.Tensor = self.irt_net(fairness_id, item_id, fairness=False)
+            y_pred.extend(pred.tolist())
+            y_true.extend(response.tolist())
 
-        with torch.no_grad():
-            for batch_data in tqdm(test_data, "evaluating"):
-                user_id, item_id, response = batch_data
-                user_id = user_id.to(device)
-                item_id = item_id.to(device)
-                response = response.to(device)
-
-                pred = self.irt_net(user_id, item_id , fairness = False)
-                y_pred.extend(pred.cpu().numpy())
-                y_true.extend(response.cpu().numpy())
-
+        self.irt_net.train()
         return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
 
     def save(self, filepath):
@@ -196,21 +184,33 @@ class IRT(CDM):
 
     def extract_ability_parameters(self, test_data, filepath, device="cpu"):
         self.irt_net = self.irt_net.to(device)
-        self.irt_net.eval()
+        self.irt_net.eval()  # Switch to evaluation mode
 
         abilities = []
-        processed_user_ids = set()
+        processed_fairness_ids = set()  # To track processed (group_id, fairness_id)
 
-        with torch.no_grad():
-            for batch_data in tqdm(test_data, "Extracting abilities"):
-                origin_id, user_id, item_id, response = batch_data
-                theta = self.irt_net.theta(user_id).squeeze()
+        for batch_data in tqdm(test_data, "Extracting abilities"):
+            group_id, user_id, item_id, response, fairness_id = batch_data
+            user_id = user_id.to(device)
+            fairness_id = fairness_id.to(device)
+            # Retrieve the ability (θ) parameter for the user based on fairness_id
+            theta = self.irt_net.theta(fairness_id).squeeze()  # Assuming theta is directly linked to fairness_id
 
-                for i, user in enumerate(user_id.cpu().numpy()):
-                    if user not in processed_user_ids:
-                        abilities.append([int(origin_id[i]), int(user), float(theta[i].item())])
-                        processed_user_ids.add(user)
+            # Add group_id, fairness_id, user_id, and corresponding θ value to the list
+            for i, fairness in enumerate(fairness_id.cpu().numpy()):
+                if (group_id[i].item(), fairness) not in processed_fairness_ids:
+                    abilities.append([
+                        int(group_id[i]),         # group_id
+                        int(fairness_id[i]),      # fairness_id
+                        int(user_id[i]),          # user_id
+                        float(theta[i].item())    # theta
+                    ])
+                    processed_fairness_ids.add((group_id[i].item(), fairness))  # Mark as processed
 
-        df_abilities = pd.DataFrame(abilities, columns=["origin_id", "user_id", "theta"])
-        df_abilities.sort_values(by="user_id", inplace=True)
+        # Save abilities to a CSV file with group_id, fairness_id, user_id, and theta
+        df_abilities = pd.DataFrame(abilities, columns=["group_id", "fairness_id", "user_id", "theta"])
+        df_abilities.sort_values(by=["group_id", "fairness_id"], inplace=True)  # Sort by group_id and fairness_id
         df_abilities.to_csv(filepath, index=False)
+        print(f"Ability parameters saved to {filepath}")
+
+        self.irt_net.train()  # Switch back to training mode

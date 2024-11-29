@@ -1,7 +1,7 @@
 import pandas as pd
 
 # 读取数据文件
-data = pd.read_csv("./a0910/expanded_dataset.csv")
+data = pd.read_csv("./a0910/origin_with_group.csv")
 
 def check_fairnessid_order(group_data, max_group_size=10):
     """

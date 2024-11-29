@@ -1,1 +1,1 @@
-IRT_finial : test auc: 0.647742, accuracy: 0.667844
+IRT_finial : test auc: 0.600019, accuracy: 0.647184

@@ -1,1 +1,2 @@
-IRT: test auc: 0.654048, accuracy: 0.670194
+../data/a0910/origin_with_group.csv 
+IRT: test auc: 0.638414, accuracy: 0.667019

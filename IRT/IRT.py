@@ -118,28 +118,37 @@ class IRT(CDM):
     def extract_ability_parameters(self, test_data, filepath, device="cpu"):
         self.irt_net = self.irt_net.to(device)
         self.irt_net.eval()  # Switch to evaluation mode
-    
+
         abilities = []
-        processed_user_ids = set()  # To track processed user_ids
-    
+        processed_user_ids = set()  # To track processed (group_id, user_id)
+
         for batch_data in tqdm(test_data, "Extracting abilities"):
-            # Unpack the batch_data, including origin_id
-            origin_id, user_id, item_id, response = batch_data
-            user_id: torch.Tensor = user_id.to(device)
-    
+            group_id,  user_id, item_id, response, fairness_id = batch_data
+            user_id = user_id.to(device)
+            """
+            torch.tensor(groupid, dtype=torch.int64),
+            torch.tensor(x, dtype=torch.int64),
+            torch.tensor(y, dtype=torch.int64),
+            torch.tensor(z, dtype=torch.float32),
+            torch.tensor(fairnessid, dtype=torch.int64)"""
             # Retrieve the ability (θ) parameter for the user
-            theta: torch.Tensor = self.irt_net.theta(user_id).squeeze()
-    
-            # Add user_id, corresponding θ value, and origin_id to the list
+            theta = self.irt_net.theta(user_id).squeeze()
+
+            # Add group_id, fairness_id, user_id, and corresponding θ value to the list
             for i, user in enumerate(user_id.cpu().numpy()):
-                if user not in processed_user_ids:
-                    abilities.append([int(origin_id[i]), int(user), float(theta[i].item())])
-                    processed_user_ids.add(user)  # Mark user_id as processed
-    
-        # Save abilities to a CSV file with origin_id
-        df_abilities = pd.DataFrame(abilities, columns=["origin_id", "user_id", "theta"])
-        df_abilities.sort_values(by="user_id", inplace=True)  # Sort by user_id
+                if (group_id[i].item(), user) not in processed_user_ids:
+                    abilities.append([
+                        int(group_id[i]),
+                        int(fairness_id[i]),
+                        int(user),
+                        float(theta[i].item())
+                    ])
+                    processed_user_ids.add((group_id[i].item(), user))  # Mark as processed
+
+        # Save abilities to a CSV file with group_id and fairness_id
+        df_abilities = pd.DataFrame(abilities, columns=["group_id", "fairness_id", "user_id", "theta"])
+        df_abilities.sort_values(by=["group_id", "fairness_id"], inplace=True)  # Sort by group_id and fairness_id
         df_abilities.to_csv(filepath, index=False)
         print(f"Ability parameters saved to {filepath}")
-    
+
         self.irt_net.train()  # Switch back to training mode

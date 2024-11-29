@@ -6,7 +6,7 @@ data = pd.read_csv("./a0910/updated_data.csv")
 
 # 找到全局最大 user_id 和 fairness_id
 global_user_id = data["user_id"].max()
-global_fairness_id = 1
+global_fairness_id = 0
 
 new_rows = []  # 用于存储新增的虚拟用户数据
 
