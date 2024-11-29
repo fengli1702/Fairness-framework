@@ -7,7 +7,7 @@ import pandas as pd
 from IRT import IRT
 from sklearn.model_selection import train_test_split
 
-path = "../data/a0910/origin_with_group.csv"
+path = "../data/a0910/origin_with_group_updated.csv"
 train_data = pd.read_csv(path)
 valid_data = pd.read_csv("../data/a0910/valid.csv")
 test_data = pd.read_csv("../data/a0910/test.csv")

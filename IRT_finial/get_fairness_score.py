@@ -11,17 +11,21 @@ from scipy.stats import spearmanr
 file_path = "v_ability_parameters.csv"
 df = pd.read_csv(file_path)
 
-# 定义DCG计算函数
-def dcg(ranks, top_k=9):
-    gains = np.power(2, ranks)[:top_k] - 1
-    discounts = np.log2(np.arange(2, top_k + 2))
+def dcg(ranks, top_k):
+    gains = np.power(2, ranks[:top_k]) - 1  # 增益值
+    discounts = np.log2(np.arange(2, top_k + 2))  # 折扣因子
     return np.sum(gains / discounts)
 
-# 定义NDCG计算函数
-def ndcg(true_ranks, pred_ranks, top_k=9):
-    dcg_true = dcg(np.argsort(true_ranks), top_k)
-    dcg_pred = dcg(np.argsort(pred_ranks), top_k)
-    idcg_true = dcg(np.arange(1, top_k + 1), top_k)
+def ndcg(true_ranks, pred_ranks, top_k):
+    # 将相关性映射到排名位置（从高到低的相关性分数）
+    true_relevance = np.argsort(-np.array(true_ranks)) + 1  # 理想排序分数
+    pred_relevance = np.argsort(-np.array(pred_ranks)) + 1  # 预测排序分数
+
+    # 计算 DCG 和 IDCG
+    dcg_pred = dcg(pred_relevance, top_k)
+    idcg_true = dcg(true_relevance, top_k)
+    
+    # 返回归一化 NDCG
     return dcg_pred / idcg_true if idcg_true > 0 else 0
 
 # 定义Kendall Tau Distance计算函数
