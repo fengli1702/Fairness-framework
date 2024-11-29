@@ -62,6 +62,7 @@ def mean_reciprocal_rank(true_ranks, pred_ranks):
 
 # 过滤掉 group_id=0 的数据
 df = df[df['group_id'] != 0]
+df = df[df['user_id'] <= 4128 ]
 
 # 中心化 fairness_id 和 theta
 def centerize_ranks(df):

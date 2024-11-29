@@ -1,1 +1,4 @@
-IRT_finial : test auc: 0.600019, accuracy: 0.647184
+../data/a0910/origin_with_group_updated.csv
+IRT_finial : test auc: 0.586762, accuracy: 0.646413
+path: ../data/a0910/extand_with_group_updated.csv
+IRT_finial : test auc: 0.598842, accuracy: 0.650018

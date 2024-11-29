@@ -7,7 +7,7 @@ import pandas as pd
 from IRT import IRT
 from sklearn.model_selection import train_test_split
 
-path = "../data/a0910/origin_with_group_updated.csv"
+path = "../data/a0910/extand_with_group_updated.csv"
 train_data = pd.read_csv(path)
 valid_data = pd.read_csv("../data/a0910/valid.csv")
 test_data = pd.read_csv("../data/a0910/test.csv")
@@ -31,7 +31,7 @@ train, valid, test = [
 
 # 初始化IRT模型
 
-model = IRT(4164, 17747)
+model = IRT(7000, 17747)
 #44874
 # 训练模型
 model.train(train, valid, epoch=10)
@@ -57,7 +57,7 @@ with open("test_acc.txt", "a") as f:
  #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
 
 
-all_virtual_user_data = pd.read_csv('../data/a0910/origin_with_group.csv')
+all_virtual_user_data = pd.read_csv('../data/a0910/extand_with_group_updated.csv')
 
 # Transform function to include origin_id
 def transform2(x, y, z, groupid,fairnessid, batch_size, **params):

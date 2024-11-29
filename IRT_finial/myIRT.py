@@ -59,7 +59,7 @@ class IRTNet(nn.Module):
         return irt3pl(theta, a, b, c, F=torch, **kwargs) 
 
 class IRT(CDM):
-    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.8 , group_size = 9):
+    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.6 , group_size = 9):
         super(IRT, self).__init__()
         self.irt_net = IRTNet(user_num, item_num, value_range, a_range)
         self.use_fairness = use_fairness
