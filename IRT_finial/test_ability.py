@@ -7,11 +7,11 @@ import pandas as pd
 from myIRT import IRT
 from sklearn.model_selection import train_test_split
 
-#改全局，只有前半段进入fairloss，
-path = "../data/a0910/extand_with_group_updated.csv"
+#
+path = "../data/a0910/origin_with_group_updated.csv"
 train_data = pd.read_csv(path)
-valid_data = pd.read_csv("../data/a0910/valid_with_fairness_id.csv")
-test_data = pd.read_csv("../data/a0910/test_with_fairness_id.csv")
+valid_data = pd.read_csv("../data/a0910/valid_with_fairness_id_origin.csv")
+test_data = pd.read_csv("../data/a0910/test_with_fairness_id_origin.csv")
 
 batch_size = 256
 
@@ -67,7 +67,7 @@ test = transform(
 model = IRT(4500, 17747)
 
 # 训练模型
-model.train(train, valid, epoch=10)
+model.train(train, valid, epoch=15)
 
 # 保存模型
 model.save("irt_model.pth")
@@ -89,7 +89,7 @@ with open("test_acc.txt", "a") as f:
  #   print(f"Name: {name}, Shape: {param.shape}, Values: {param.data}")
 
 
-all_virtual_user_data = pd.read_csv('../data/a0910/extand_with_group_updated.csv')
+all_virtual_user_data = pd.read_csv('../data/a0910/origin_with_group_updated.csv')
 
 # Transform function to include origin_id
 def transform2(x, y, z, groupid,fairnessid, batch_size, **params):

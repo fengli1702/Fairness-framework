@@ -59,7 +59,7 @@ class IRTNet(nn.Module):
         return irt3pl(theta, a, b, c, F=torch, **kwargs) 
 
 class IRT(CDM):
-    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.6 , group_size = 9):
+    def __init__(self, user_num, item_num, value_range=None, a_range=None, use_fairness=True, fairness_lambda=0.4 , group_size = 9):
         super(IRT, self).__init__()
         self.irt_net = IRTNet(user_num, item_num, value_range, a_range)
         self.use_fairness = use_fairness
@@ -68,7 +68,7 @@ class IRT(CDM):
         if use_fairness:
             self.fairness_loss = FairnessLoss()
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.001):
+    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.005):
         self.irt_net = self.irt_net.to(device)
         bce_loss = nn.BCELoss()
         trainer = torch.optim.Adam(self.irt_net.parameters(), lr)

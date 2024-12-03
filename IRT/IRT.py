@@ -21,7 +21,7 @@ def irf(theta, a, b, c, D=1.702, *, F=np):
 irt3pl = irf
 
 class IRTNet(nn.Module):
-    def __init__(self, user_num, item_num, value_range, a_range, irf_kwargs=None):
+    def __init__(self, user_num, item_num, value_range, a_range=1, irf_kwargs=None):
         super(IRTNet, self).__init__()
         self.user_num = user_num
         self.item_num = item_num
@@ -63,7 +63,7 @@ class IRT(CDM):
         super(IRT, self).__init__()
         self.irt_net = IRTNet(user_num, item_num, value_range, a_range) #实例化IRTNet类
 
-    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.001) -> ...:
+    def train(self, train_data, test_data=None, *, epoch: int, device="cuda", lr=0.005) -> ...:
         self.irt_net = self.irt_net.to(device)
         loss_function = nn.BCELoss()  #二分类交叉熵作为损失函数
 

@@ -1,4 +1,4 @@
-
+../data/a0910/origin_with_group_updated.csv
 Group-level Fairness Metrics:
 Average NDCG: 0.795105
 Average Kendall Tau Distance: 6.420814
@@ -6,9 +6,38 @@ Average Spearman's Rank Correlation Coefficient: 0.282486
 Average Cosine Similarity: 0.744604
 Average Mean Reciprocal Rank: 0.479428
 
+../data/a0910/extand_with_group_updated.csv
 Group-level Fairness Metrics:
 Average NDCG: 0.775218
 Average Kendall Tau Distance: 6.497738
 Average Spearman's Rank Correlation Coefficient: 0.107369
 Average Cosine Similarity: 0.669799
+Average Mean Reciprocal Rank: 0.479428
+
+../data/a0910/extand_with_group_updated.csv
+//学习率0.01
+Group-level Fairness Metrics:
+Average NDCG: 0.901179
+Average Kendall Tau Distance: 2.667421
+Average Spearman's Rank Correlation Coefficient: 0.495753
+Average Cosine Similarity: 0.799546
+Average Mean Reciprocal Rank: 0.479428
+
+../data/a0910/origin_with_group_updated.csv
+//学习率0.01 
+Group-level Fairness Metrics:
+Average NDCG: 0.942124
+Average Kendall Tau Distance: 1.676471
+Average Spearman's Rank Correlation Coefficient: 0.910774
+Average Cosine Similarity: 0.970615
+Average Mean Reciprocal Rank: 0.479428
+
+
+//epoch 15
+//学习率0.005  lambda=0.4
+Group-level Fairness Metrics:
+Average NDCG: 0.925905
+Average Kendall Tau Distance: 2.626697
+Average Spearman's Rank Correlation Coefficient: 0.791252
+Average Cosine Similarity: 0.927818
 Average Mean Reciprocal Rank: 0.479428
