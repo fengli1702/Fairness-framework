@@ -6,12 +6,12 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
 
-path = "../data/a0910/origin_with_group_updated.csv"
+path = "../data/a0910/origin_with_group_shuffled.csv"
 train_data = pd.read_csv(path)
 valid_data = pd.read_csv("../data/a0910/valid_with_fairness_id_origin.csv")
 test_data = pd.read_csv("../data/a0910/test_with_fairness_id_origin.csv")
 
-batch_size = 256
+batch_size = 32
 
 
 # Transform function to convert data into DataLoader
@@ -26,7 +26,7 @@ def transform(x, y,  z, n, k, j, i,batch_size, **params):
         torch.tensor(j, dtype=torch.int64),
         torch.tensor(i, dtype=torch.int64)
     )
-    return DataLoader(dataset, batch_size=batch_size, **params,shuffle=True)
+    return DataLoader(dataset, batch_size=batch_size, **params,shuffle=False)
 #user_id, item_id, response, group_id, fairness_id, get_group = batch_data
 # Prepare train dataset (which contains fairness_id and group_id)
 train = transform( 
@@ -64,7 +64,7 @@ test = transform(
 
 logging.getLogger().setLevel(logging.INFO)
 
-cdm = MIRT(4500, 17747, 123 , a_range=1)
+cdm = MIRT(2494, 17747, 123 , a_range=1)
 
 cdm.train(train, valid, epoch=15,device="cuda")
 cdm.save("mirt.params")

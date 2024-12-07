@@ -1,5 +1,13 @@
 
- path: ../data/a0910/origin_with_group_updated.csv
-IRT_finial : test auc: 0.571058, accuracy: 0.654304
- path: ../data/a0910/origin_with_group_updated.csv
-IRT_finial : test auc: 0.702532, accuracy: 0.684075
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.695582, accuracy: 0.672884
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.700968, accuracy: 0.677134
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.694001, accuracy: 0.669817
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.686050, accuracy: 0.667270
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.686521, accuracy: 0.667737
+ path: ../data/a0910/origin_with_group_shuffled.csv
+IRT_finial : test auc: 0.685064, accuracy: 0.664509

@@ -88,7 +88,7 @@ class MIRT(CDM):
                 predicted_response: torch.Tensor = self.irt_net(user_id, item_id)
                 response: torch.Tensor = response.to(device)
                 loss = loss_function(predicted_response, response)
-
+                print(loss)
                 # back propagation
                 trainer.zero_grad()
                 loss.backward()

@@ -1,11 +1,3 @@
-../data/a0910/origin_with_group_updated.csv
-Group-level Fairness Metrics:
-Average NDCG: 0.771885
-Average Kendall Tau Distance: 7.221719
-Average Spearman's Rank Correlation Coefficient: 0.123236
-Average Cosine Similarity: 0.684253
-Average Mean Reciprocal Rank: 0.479428
-
 Group-level Fairness Metrics:
 Average NDCG: 0.769622
 Average Kendall Tau Distance: 7.287330
