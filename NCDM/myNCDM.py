@@ -79,7 +79,8 @@ class NCDM(CDM):
             for batch_data in tqdm(train_data, "Epoch %s" % epoch_i):
                 #print(batch_data)
                 batch_count += 1
-                origin_id,user_id, item_id, knowledge_emb, y = batch_data
+                
+                user_id, item_id, knowledge_emb, y = batch_data
                 user_id: torch.Tensor = user_id.to(device)
                 #print(user_id)
                 #print(user_id[0],user_id[1],user_id[2])
@@ -101,11 +102,15 @@ class NCDM(CDM):
                 auc, accuracy = self.eval(test_data, device=device)
                 print("[Epoch %d] auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
 
-    def eval(self, test_data, device="cpu"):
+    def eval(self, test_data, device="cpu") -> tuple:
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
-        y_true, y_pred = [], []
-        for batch_data in tqdm(test_data, "Evaluating"):
+        loss_function = nn.BCELoss()
+        losses = []
+        
+        y_pred = []
+        y_true = []
+        for batch_data in tqdm(test_data, "evaluating"):
             user_id, item_id, knowledge_emb, y = batch_data
             user_id: torch.Tensor = user_id.to(device)
             item_id: torch.Tensor = item_id.to(device)
@@ -123,59 +128,47 @@ class NCDM(CDM):
     def load(self, filepath):
         self.ncdm_net.load_state_dict(torch.load(filepath))  # , map_location=lambda s, loc: s
         logging.info("load parameters from %s" % filepath)
-    def extract_user_abilities(self, test_data, device="cpu", weighted=False, filepath="v_ability_parameters.csv"):
-        """
-        Extract and save student ability parameters (hs) after training, with an option to compute
-        weighted abilities based on item difficulty.
+    def extract_ability_parameters(self, test_data, filepath, device="cpu"):
+        self.ncdm_net = self.ncdm_net.to(device)
+        self.ncdm_net.eval()  # Switch to evaluation mode
     
-        :param test_data: DataLoader containing the test data
-        :param device: Device to use for computation ('cuda' or 'cpu')
-        :param weighted: Whether to use weighted abilities based on item difficulty
-        :return: DataFrame with origin_id, user_id, and their ability score (theta)
-        """
-        self.ncdm_net = self.ncdm_net.to(device)  # Ensure the model is moved to the correct device
-        self.ncdm_net.eval()  # Set the model to evaluation mode
+        abilities = []
+        processed_user_ids = set()  # To track processed (group_id, user_id)
     
-        # Prepare to store the results in a dictionary to avoid duplicates
-        user_theta_map = {}
-    
-        for batch_data in test_data:
-            origin_id, user_id, item_id, knowledge_emb, y = batch_data
-            origin_id = origin_id.cpu().numpy()
+        for batch_data in tqdm(test_data, "Extracting abilities"):
+            user_id, item_id, response, group_id, fairness_id, knowledge_emb, comm = batch_data
             user_id = user_id.to(device)
             item_id = item_id.to(device)
+            knowledge_emb = knowledge_emb.to(device)
+            response = response.to(device)
+            fairness_id = fairness_id.to(device)
+            comm = comm.to(device)
     
-            # Extract student embeddings and move to CPU for calculation
-            student_embeddings = self.ncdm_net.student_emb(user_id).detach().cpu().numpy()
+            # Retrieve the ability (θ) parameter for the user
+            student_embeddings = self.ncdm_net.student_emb(fairness_id).detach().cpu().numpy()
             stat_emb = torch.sigmoid(torch.tensor(student_embeddings)).numpy()  # hs
     
-            # Compute the scalar ability for each student
-            if weighted:
-                # Use item difficulty to compute weighted ability
-                k_difficulty = torch.sigmoid(self.ncdm_net.k_difficulty(item_id)).detach().cpu().numpy()
-                e_difficulty = torch.sigmoid(self.ncdm_net.e_difficulty(item_id)).detach().cpu().numpy()
-                weighted_ability = np.mean(stat_emb * k_difficulty * e_difficulty, axis=1)
-                theta = weighted_ability
-            else:
-                # Simply use the average of the ability vector
-                theta = np.mean(stat_emb, axis=1)
+            # Add group_id, fairness_id, user_id, and corresponding θ values to the list
+            for i, user in enumerate(fairness_id.cpu().numpy()):
+                if (group_id[i].item(), user) not in processed_user_ids:
+                    selected_dims = comm[i].cpu().numpy().astype(int)  # Ensure comm is an integer array
+                    theta_values = stat_emb[i, selected_dims]
+                    ability_entry = [
+                        int(group_id[i]),
+                        int(fairness_id[i] + 1),
+                        int(user_id[i])
+                    ] + theta_values.tolist()
+                    abilities.append(ability_entry)
+                    processed_user_ids.add((group_id[i].item(), user))  # Mark as processed
     
-            # Update user_theta_map to ensure unique user_id and theta
-            for oid, uid, ability in zip(origin_id, user_id.cpu().numpy(), theta):
-                adjusted_uid = uid + 1  # Adjust user_id to start from 1
-                adjusted_oid = oid + 1  # Adjust origin_id to match correct indexing
-                if adjusted_uid in user_theta_map:
-                    # If user_id already exists, you can choose to average, max, or replace the theta
-                    user_theta_map[adjusted_uid] = (user_theta_map[adjusted_uid][0], 
-                                                    (user_theta_map[adjusted_uid][1] + ability) / 2)  # Example: averaging
-                else:
-                    user_theta_map[adjusted_uid] = (adjusted_oid, ability)
-
-        # Create a DataFrame with origin_id, user_id, and theta (ability score)
-        df = pd.DataFrame([(uid, oid, theta) for uid, (oid, theta) in user_theta_map.items()], 
-                          columns=['user_id', 'origin_id', 'theta'])
+        # Create column names for the output file
+        max_comm_length = max(len(comm[i]) for i in range(len(comm)))
+        columns = ["group_id", "fairness_id", "user_id"] + [f"theta_{j}" for j in range(max_comm_length)]
     
-        # Save the DataFrame to a CSV file
-        df.sort_values(by="user_id", inplace=True)
-        df.to_csv(filepath, index=False)
-        print(f"Student abilities (theta) saved to '{filepath}'")
+        # Save abilities to a CSV file with group_id and fairness_id
+        df_abilities = pd.DataFrame(abilities, columns=columns)
+        df_abilities.sort_values(by=["group_id", "fairness_id"], inplace=True)  # Sort by group_id and fairness_id
+        df_abilities.to_csv(filepath, index=False)
+        print(f"Ability parameters saved to {filepath}")
+    
+        self.ncdm_net.train()  # Switch back to training mode

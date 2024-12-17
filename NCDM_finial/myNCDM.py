@@ -70,148 +70,118 @@ class NCDM(CDM):
     def __init__(self, knowledge_n, exer_n, student_n, zeta=0.5, groupsize=11):
         super(NCDM, self).__init__()
         self.ncdm_net = Net(knowledge_n, exer_n, student_n)
-        self.zeta = zeta
-        self.groupsize = groupsize
+        self.fairness_lambda = zeta
+        self.fairness_loss = FairnessLoss()
 
     def train(self, train_data, test_data=None, epoch=10, device="cuda", lr=0.002, silence=False):
-        self.ncdm_net = self.ncdm_net.to(device)#cpu
+        self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.train()
-        score_loss_function = nn.BCELoss()
-        theta_loss_function = FairnessLoss()  # now has id, id_pair, n as additional inputs
-        
+        bce_loss = nn.BCELoss()
         optimizer = optim.Adam(self.ncdm_net.parameters(), lr=lr)
-        
+
         for epoch_i in range(epoch):
             epoch_losses = []
             epoch_score_losses = []
             epoch_fairness_losses = []
-            batch_count = 0
 
             for batch_data in tqdm(train_data, "Epoch %s" % epoch_i):
-                batch_count += 1
-                origin_id, user_id, item_id, knowledge_emb, y = batch_data
-                #originid index the data
-                #origin_id = origin_id.to(device)
-                user_id :torch.Tensor = user_id.to(device) #use this to calculate
-                item_id :torch.Tensor = item_id.to(device)
-                knowledge_emb :torch.Tensor = knowledge_emb.to(device)
-                y :torch.Tensor = y.to(device) #score
-
-                #分数误差
-                predicted_response = self.ncdm_net(user_id, item_id, knowledge_emb, False)
-                loss_score = score_loss_function(predicted_response, y)
+                user_id, item_id, knowledge_emb, y, fairness_id, group_id, groupindex, group_size,comm_konw = batch_data
                 
-                #接下来算小组误差
+                item_id = item_id.to(device)
+                knowledge_emb = knowledge_emb.to(device)
+                y = y.to(device)
+                fairness_id = fairness_id.to(device)
+                group_id = group_id.to(device)
+                groupindex = groupindex.to(device)
+                group_size = group_size.to(device)
+                comm_konw = comm_konw.to(device)
 
-                pair_id=[] #there are batch_size id in total
-                # each have a group ,so len(pair_id)=batch_size
-                # len(pair_id[i]) = self.group_size
-                for i in range(user_id.size(0)):
-                    group_pair = []
-                    group_index = user_id[i].item() // self.groupsize
-                    for j in range(self.groupsize):
-                        group_pair.append(j + group_index * self.groupsize)
+                # 计算预测的响应
+                predicted_response = self.ncdm_net(fairness_id, item_id, knowledge_emb, fairness=False)
+                loss_score = bce_loss(predicted_response, y)
+
+                # 计算公平性损失
+                unique_groups = torch.unique(group_id)
+                group_fairness_losses = []
+                for gid in unique_groups:
+                    group_mask = (group_id == gid)
                     
-                    pair_id.append(group_pair)
-                
-                pair_id_tensor = torch.tensor(pair_id , device = device)
-                loss_theta = 0
-                num=0
-                #下面是计算theta误差，大循环是对每一个group，小循环是对group的每个人的每一维度能力的pairloss，最后去平均
-                for i in range(len(pair_id)):
-                    if random.random() < 4/5:
+                    group_start = groupindex[group_mask][0].item()
+                    group_sz = group_size[group_mask][0].item()
+                    if group_sz <= 2:
                         continue
-                    num=num+1
-                    group_user_ids = pair_id_tensor[i]  # Get user IDs for the current group
-                    # Call self.ncdm_net to get predicted_response and theta for this group
-                    theta_group = self.ncdm_net(group_user_ids, item_id, knowledge_emb, True)
 
-                    group_size, num_dimensions = theta_group.shape  # (11, 123)
+                    group_users = [i for i in range(group_start, group_start + group_sz)]
+                    group_users = torch.tensor(group_users, dtype=torch.int64).to(device)
+                    #print("group_users:",group_users)
+                    #latent_dim = self.ncdm_net.student_emb.embedding_dim
+                    #k = max(1, latent_dim // 24 + 20)
+                    #random.seed(int(gid.item()))
+                    #selected_dims = random.sample(range(latent_dim), k)
+                    selected_dims = comm_konw[group_mask][0].tolist()
+                    #print("selected_dims:",selected_dims)
+                    theta_group_full = self.ncdm_net(group_users, None, None, fairness=True)
+                    theta_group_selected = theta_group_full[:, selected_dims]
 
-                    # Reshape group_user_ids to match the required target format for fairness_loss
-                    targets_reshaped = group_user_ids.view(1, -1)  # Shape: [1, 11]
+                    theta_mean = theta_group_selected.mean(dim=1)
+                    predictions_reshaped = theta_mean.view(1, -1)  # 模型预测 theta
+                    targets_reshaped = group_users.view(1, -1)  # 目标 fairness_id
 
-                    # Randomly sample 1/3 of the users for ranking
-                    sampled_user_indices = torch.randperm(group_size)[:group_size // 2]
-                    sampled_user_ids = targets_reshaped[:, sampled_user_indices]  # Sampled targets for fairness loss
+                    # 公平性损失计算：fairness_id 越低 theta 越高
+                    #print("predictions_reshaped:",predictions_reshaped)
+                    #print("targets_reshaped:",targets_reshaped)
+                    fairness_loss_val = self.fairness_loss(predictions_reshaped, targets_reshaped)
 
-                    # Randomly sample 1/3 of the dimensions for fairness calculation
-                    sampled_dimensions = torch.randperm(num_dimensions)[:num_dimensions // 8]
+                    group_fairness_losses.append(fairness_loss_val)
 
-                    # Initialize a list to store fairness loss for each dimension
-                    losses_per_dimension = []
-
-                    for dim in sampled_dimensions:
-                        # Select the sampled users' scores for the current dimension
-                        predictions_reshaped = theta_group[sampled_user_indices, dim].view(1, -1)
-
-                        # Compute fairness loss for the current dimension
-                        fairness_loss_value = theta_loss_function(predictions_reshaped, sampled_user_ids)
-
-                        # Append the result
-                        losses_per_dimension.append(fairness_loss_value)
-
-                    # Compute the mean fairness loss across all sampled dimensions
-                    average_fairness_loss = torch.mean(torch.stack(losses_per_dimension))
-
-                    # Append the fairness loss for this group to the total loss
-                    loss_theta += average_fairness_loss
-
-                # Compute the overall loss across all groups
-                if num != 0:
-                    loss_theta = loss_theta / num
+                # 合并损失
+                if group_fairness_losses:
+                    fairness_loss = torch.mean(torch.stack(group_fairness_losses))
+                    loss = (1 - self.fairness_lambda) * loss_score + self.fairness_lambda * fairness_loss
                 else:
-                    loss_theta = torch.tensor(0.0, device=device)
+                    loss = loss_score
 
-                loss_score = loss_score.mean()
-
-                # Final combined loss calculation
-                loss = (1 - self.zeta) * loss_score + self.zeta * loss_theta
-                loss = loss.mean()
-                epoch_score_losses.append(loss_score.item())
-                #print(type(loss_theta))
-                epoch_fairness_losses.append(loss_theta.item())
-                #print(type(epoch_fairness_losses[0]))# <class 'list'>
-                #print(type(loss_theta))# <class 'torch.Tensor'>
-                #print(type(loss_score))# <class 'torch.Tensor'>
-                #print(type(epoch_score_losses[0]))# <class 'list'>
-                
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-                epoch_losses.append(loss.mean().item())
+                epoch_losses.append(loss.item())
+                epoch_score_losses.append(loss_score.item())
+                if group_fairness_losses:
+                    epoch_fairness_losses.append(fairness_loss.item())
+                else:
+                    epoch_fairness_losses.append(0.0)
 
-            print("[Epoch %d] average loss: %.6f, score loss: %.6f ,fairness loss: %.6f" 
-                  % (epoch_i, float(np.mean(epoch_losses)), float(np.mean(epoch_score_losses)),
-                   float(np.mean(epoch_fairness_losses)    
-                  )))
+            print("[Epoch %d] average loss: %.6f, score loss: %.6f, fairness loss: %.6f" % (
+                epoch_i, float(np.mean(epoch_losses)), float(np.mean(epoch_score_losses)),
+                float(np.mean(epoch_fairness_losses))
+            ))
 
-        if test_data is not None:
-            auc, accuracy = self.eval(test_data, device=device)
-            epoch_i=0
-            print("[Epoch %d]  auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
-
+            if test_data is not None:
+                auc, accuracy = self.eval(test_data, device=device)
+                print("[Epoch %d]  auc: %.6f, accuracy: %.6f" % (epoch_i, auc, accuracy))
     
     def eval(self, test_data, device="cpu"):
         self.ncdm_net = self.ncdm_net.to(device)
         self.ncdm_net.eval()
         loss_function = nn.BCELoss()
         losses = []
-        
+
         y_true, y_pred = [], []
         for batch_data in tqdm(test_data, "Evaluating"):
-            user_id, item_id, knowledge_emb, y = batch_data
-            user_id: torch.Tensor = user_id.to(device)
-            item_id: torch.Tensor = item_id.to(device)
-            knowledge_emb: torch.Tensor = knowledge_emb.to(device)
-            pred: torch.Tensor = self.ncdm_net(user_id, item_id, knowledge_emb, False)
-            y: torch.Tensor = y.to(device)
+            user_id, item_id, knowledge_emb, y, fairness_id, group_id, groupindex, group_size,comm = batch_data
+            user_id = user_id.to(device)
+            item_id = item_id.to(device)
+            fairness_id = fairness_id.to(device)
+            knowledge_emb = knowledge_emb.to(device)
+            y = y.to(device)
+
+            pred = self.ncdm_net(fairness_id, item_id, knowledge_emb, fairness=False)
             loss = loss_function(pred, y)
-            losses.append(loss.mean().item())
-            
+            losses.append(loss.item())
+
             y_pred.extend(pred.detach().cpu().tolist())
-            y_true.extend(y.tolist())
+            y_true.extend(y.detach().cpu().tolist())
 
         print("[Valid Loss] %.6f" % (float(np.mean(losses))))
         return roc_auc_score(y_true, y_pred), accuracy_score(y_true, np.array(y_pred) >= 0.5)
@@ -225,59 +195,47 @@ class NCDM(CDM):
         self.ncdm_net.load_state_dict(torch.load(filepath, weights_only=True))
         logging.info("load parameters from %s" % filepath)
 
-    def extract_user_abilities(self, test_data, device="cpu", weighted=False, filepath="v_ability_parameters.csv"):
-        """
-        Extract and save student ability parameters (hs) after training, with an option to compute
-        weighted abilities based on item difficulty.
+    def extract_ability_parameters(self, test_data, filepath, device="cpu"):
+        self.ncdm_net = self.ncdm_net.to(device)
+        self.ncdm_net.eval()  # Switch to evaluation mode
     
-        :param test_data: DataLoader containing the test data
-        :param device: Device to use for computation ('cuda' or 'cpu')
-        :param weighted: Whether to use weighted abilities based on item difficulty
-        :return: DataFrame with origin_id, user_id, and their ability score (theta)
-        """
-        self.ncdm_net = self.ncdm_net.to(device)  # Ensure the model is moved to the correct device
-        self.ncdm_net.eval()  # Set the model to evaluation mode
+        abilities = []
+        processed_user_ids = set()  # To track processed (group_id, user_id)
     
-        # Prepare to store the results in a dictionary to avoid duplicates
-        user_theta_map = {}
-    
-        for batch_data in test_data:
-            origin_id, user_id, item_id, knowledge_emb, y = batch_data
-            origin_id = origin_id.cpu().numpy()
+        for batch_data in tqdm(test_data, "Extracting abilities"):
+            user_id, item_id, response, group_id, fairness_id, knowledge_emb, comm = batch_data
             user_id = user_id.to(device)
             item_id = item_id.to(device)
+            knowledge_emb = knowledge_emb.to(device)
+            response = response.to(device)
+            fairness_id = fairness_id.to(device)
+            comm = comm.to(device)
     
-            # Extract student embeddings and move to CPU for calculation
-            student_embeddings = self.ncdm_net.student_emb(user_id).detach().cpu().numpy()
+            # Retrieve the ability (θ) parameter for the user
+            student_embeddings = self.ncdm_net.student_emb(fairness_id).detach().cpu().numpy()
             stat_emb = torch.sigmoid(torch.tensor(student_embeddings)).numpy()  # hs
     
-            # Compute the scalar ability for each student
-            if weighted:
-                # Use item difficulty to compute weighted ability
-                k_difficulty = torch.sigmoid(self.ncdm_net.k_difficulty(item_id)).detach().cpu().numpy()
-                e_difficulty = torch.sigmoid(self.ncdm_net.e_difficulty(item_id)).detach().cpu().numpy()
-                weighted_ability = np.mean(stat_emb * k_difficulty * e_difficulty, axis=1)
-                theta = weighted_ability
-            else:
-                # Simply use the average of the ability vector
-                theta = np.mean(stat_emb, axis=1)
+            # Add group_id, fairness_id, user_id, and corresponding θ values to the list
+            for i, user in enumerate(fairness_id.cpu().numpy()):
+                if (group_id[i].item(), user) not in processed_user_ids:
+                    selected_dims = comm[i].cpu().numpy().astype(int)  # Ensure comm is an integer array
+                    theta_values = stat_emb[i, selected_dims]
+                    ability_entry = [
+                        int(group_id[i]),
+                        int(fairness_id[i] + 1),
+                        int(user_id[i])
+                    ] + theta_values.tolist()
+                    abilities.append(ability_entry)
+                    processed_user_ids.add((group_id[i].item(), user))  # Mark as processed
     
-            # Update user_theta_map to ensure unique user_id and theta
-            for oid, uid, ability in zip(origin_id, user_id.cpu().numpy(), theta):
-                adjusted_uid = uid + 1  # Adjust user_id to start from 1
-                adjusted_oid = oid + 1  # Adjust origin_id to match correct indexing
-                if adjusted_uid in user_theta_map:
-                    # If user_id already exists, you can choose to average, max, or replace the theta
-                    user_theta_map[adjusted_uid] = (user_theta_map[adjusted_uid][0], 
-                                                    (user_theta_map[adjusted_uid][1] + ability) / 2)  # Example: averaging
-                else:
-                    user_theta_map[adjusted_uid] = (adjusted_oid, ability)
-
-        # Create a DataFrame with origin_id, user_id, and theta (ability score)
-        df = pd.DataFrame([(uid, oid, theta) for uid, (oid, theta) in user_theta_map.items()], 
-                          columns=['user_id', 'origin_id', 'theta'])
+        # Create column names for the output file
+        max_comm_length = max(len(comm[i]) for i in range(len(comm)))
+        columns = ["group_id", "fairness_id", "user_id"] + [f"theta_{j}" for j in range(max_comm_length)]
     
-        # Save the DataFrame to a CSV file
-        df.sort_values(by="user_id", inplace=True)
-        df.to_csv(filepath, index=False)
-        print(f"Student abilities (theta) saved to '{filepath}'")
+        # Save abilities to a CSV file with group_id and fairness_id
+        df_abilities = pd.DataFrame(abilities, columns=columns)
+        df_abilities.sort_values(by=["group_id", "fairness_id"], inplace=True)  # Sort by group_id and fairness_id
+        df_abilities.to_csv(filepath, index=False)
+        print(f"Ability parameters saved to {filepath}")
+    
+        self.ncdm_net.train()  # Switch back to training mode

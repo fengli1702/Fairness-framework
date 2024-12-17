@@ -1,70 +1,32 @@
 # coding: utf-8
-# 2021/4/1 @ WangFei
 import logging
-#from EduCDM import NCDM
 from myNCDM import NCDM
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import pandas as pd
 import numpy as np
+import ast  # 用于解析字符串列表
 
-import os
-import subprocess
+path = "../data/a0910/origin_finial.csv"
+train_data = pd.read_csv(path)
 
-def get_available_gpus(limit=2):
-    """
-    Query available GPUs and return a list of GPU indices that are mostly free.
-    :param limit: Max number of GPUs to use.
-    :return: A comma-separated string of GPU indices.
-    """
-    try:
-        # Use nvidia-smi to get GPU utilization
-        result = subprocess.check_output(['nvidia-smi', '--query-gpu=index,memory.used,memory.total,utilization.gpu',
-                                          '--format=csv,nounits,noheader'], encoding='utf-8')
-        
-        # Parse the result and find the most available GPUs
-        gpu_info = result.strip().split('\n')
-        available_gpus = []
-        for gpu in gpu_info:
-            index, memory_used, memory_total, utilization = gpu.split(', ')
-            memory_used = int(memory_used)
-            memory_total = int(memory_total)
-            utilization = int(utilization)
-            
-            # Check if the GPU is considered "free" (low memory usage and low utilization)
-            if memory_used < 2000 and utilization < 20:  # You can adjust these thresholds
-                available_gpus.append(index)
-        
-        # Limit the number of GPUs to use
-        if len(available_gpus) > limit:
-            available_gpus = available_gpus[:limit]
+# 将'common_knowledge'列的字符串转换为列表
+train_data['common_knowledge'] = train_data['common_knowledge'].apply(ast.literal_eval)
 
-        if available_gpus:
-            # Set the environment variable to limit visible GPUs
-            os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(available_gpus)
-            print(f"Using GPUs: {os.environ['CUDA_VISIBLE_DEVICES']}")
-        else:
-            print("No available GPUs found, using default device.")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to query GPUs: {e}")
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Default to CPU if GPU query fails
+# 对于valid_data和test_data，使用空列表代替'common_knowledge'列
+valid_data = pd.read_csv("../data/a0910/valid_with_fairness_id_origin.csv")
+valid_data['common_knowledge'] = [[] for _ in range(len(valid_data))]
 
-# Call the function at the start of your script
-#get_available_gpus(limit=2)
+test_data = pd.read_csv("../data/a0910/test_with_fairness_id_origin.csv")
+test_data['common_knowledge'] = [[] for _ in range(len(test_data))]
 
-# Your NCDM model and training code goes here
-
-
-train_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-valid_data = pd.read_csv("../data/a0910/all_virtual_user_data.csv")
-test_data = pd.read_csv("../data/a0910/test.csv")
 df_item = pd.read_csv("../data/a0910/item.csv")
 
 item2knowledge = {}
 knowledge_set = set()
 for i, s in df_item.iterrows():
-    item_id, knowledge_codes = s['item_id'], list(set(eval(s['knowledge_code'])))
+    item_id = s['item_id']
+    knowledge_codes = list(set(eval(s['knowledge_code'])))
     item2knowledge[item_id] = knowledge_codes
     knowledge_set.update(knowledge_codes)
 
@@ -75,52 +37,123 @@ item_n = np.max([np.max(train_data['item_id']), np.max(valid_data['item_id']), n
 knowledge_n = np.max(list(knowledge_set))
 
 
-def transform(origin_id, user, item, item2knowledge, score, batch_size):
-    knowledge_emb = torch.zeros((len(item), knowledge_n))
-    for idx in range(len(item)):
-        knowledge_emb[idx][np.array(item2knowledge[item[idx]]) - 1] = 1.0
+def transform(x, y, z, n, k, j, i, common_knowledge_list, item2knowledge, batch_size, **params):
+    knowledge_emb = torch.zeros((len(y), knowledge_n))
+    for idx in range(len(y)):
+        knowledge_codes = item2knowledge.get(y.iloc[idx], [])
+        knowledge_emb[idx][np.array(knowledge_codes) - 1] = 1.0
 
-    data_set = TensorDataset(
-        torch.tensor(origin_id, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
-        torch.tensor(user, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
-        torch.tensor(item, dtype=torch.int64) - 1,  # (1, item_n) to (0, item_n-1)
+    # 将'common_knowledge_list'转换为张量
+    common_knowledge_emb = torch.zeros((len(y), knowledge_n))
+    for idx in range(len(y)):
+        common_knowledge_codes = common_knowledge_list.iloc[idx]
+        if common_knowledge_codes:
+            common_knowledge_emb[idx][np.array(common_knowledge_codes) - 1] = 1.0
+
+    dataset = TensorDataset(
+        torch.tensor(x.values, dtype=torch.int64) - 1,
+        torch.tensor(y.values, dtype=torch.int64) - 1,
         knowledge_emb,
-        torch.tensor(score, dtype=torch.float32)
+        torch.tensor(z.values, dtype=torch.float32),
+        torch.tensor(n.values, dtype=torch.int64),
+        torch.tensor(k.values, dtype=torch.int64),
+        torch.tensor(j.values, dtype=torch.int64),
+        torch.tensor(i.values, dtype=torch.int64),
+        common_knowledge_emb
     )
-    return DataLoader(data_set, batch_size=batch_size, shuffle=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False, **params)
 
 
-train_set, valid_set= [
-    transform(data["origin_id"],data["user_id"], data["item_id"], item2knowledge, data["score"], batch_size)
-    for data in [train_data, valid_data]
-]
+# 准备训练和验证数据集
+train_set = transform(
+    train_data["user_id"],
+    train_data["item_id"],
+    train_data["score"],
+    train_data["fairness_id"],
+    train_data["group_id"],
+    train_data["groupindex"],
+    train_data["group_size"],
+    train_data["common_knowledge"],
+    item2knowledge,
+    batch_size
+)
 
-def transform2(user, item, item2knowledge, score, batch_size):
-    knowledge_emb = torch.zeros((len(item), knowledge_n))
-    for idx in range(len(item)):
-        knowledge_emb[idx][np.array(item2knowledge[item[idx]]) - 1] = 1.0
+valid_set = transform(
+    valid_data["user_id"],
+    valid_data["item_id"],
+    valid_data["score"],
+    valid_data["fairness_id"],
+    pd.Series([0] * len(valid_data)),
+    pd.Series([0] * len(valid_data)),
+    pd.Series([0] * len(valid_data)),
+    valid_data["common_knowledge"],  # 空列表
+    item2knowledge,
+    batch_size
+)
 
-    data_set = TensorDataset(
-        torch.tensor(user, dtype=torch.int64) - 1,  # (1, user_n) to (0, user_n-1)
-        torch.tensor(item, dtype=torch.int64) - 1,  # (1, item_n) to (0, item_n-1)
-        knowledge_emb,
-        torch.tensor(score, dtype=torch.float32)
-    )
-    return DataLoader(data_set, batch_size=batch_size, shuffle=True)
-
-test_set = transform2(test_data["user_id"], test_data["item_id"], item2knowledge, test_data["score"], batch_size)
+test_set = transform(
+    test_data["user_id"],
+    test_data["item_id"],
+    test_data["score"],
+    test_data["fairness_id"],
+    pd.Series([0] * len(test_data)),
+    pd.Series([0] * len(test_data)),
+    pd.Series([0] * len(test_data)),
+    test_data["common_knowledge"],  # 空列表
+    item2knowledge,
+    batch_size
+)
 
 logging.getLogger().setLevel(logging.INFO)
 cdm = NCDM(knowledge_n, item_n, user_n)
-cdm.train(train_set, valid_set, epoch=0, device="cpu")
-print("train finished")
+cdm.train(train_set, valid_set, epoch=10, device="cuda")
 cdm.save("ncdm.snapshot")
-print("save finished")
-cdm.load("ncdm.snapshot")
-print("load finished")
 auc, accuracy = cdm.eval(test_set)
 print("auc: %.6f, accuracy: %.6f" % (auc, accuracy))
 
-cdm.extract_user_abilities(train_set, weighted=False, filepath="v_ability_parameters.csv")
+# 存入文件，auc和accuracy
+with open("test_acc.txt", "a") as f:
+    f.write("\n path: %s\n" % path)
+    f.write("NCDM_final : test auc: %.6f, accuracy: %.6f\n" % (auc, accuracy))
 
+all_virtual_user_data = pd.read_csv('../data/a0910/origin_finial.csv')
+all_virtual_user_data['common_knowledge'] = all_virtual_user_data['common_knowledge'].apply(ast.literal_eval)
 
+def transform2(user_id, item_id, score, group_id, fairness_id, common_knowledge_list, item2knowledge, batch_size, **params):
+    knowledge_emb = torch.zeros((len(item_id), knowledge_n))
+    for idx in range(len(item_id)):
+        knowledge_codes = item2knowledge.get(item_id.iloc[idx] + 1, [])
+        knowledge_emb[idx][np.array(knowledge_codes) - 1] = 1.0
+
+    # 将'common_knowledge_list'转换为张量
+    common_knowledge_emb = torch.zeros((len(item_id), knowledge_n))
+    for idx in range(len(item_id)):
+        common_knowledge_codes = common_knowledge_list.iloc[idx]
+        if common_knowledge_codes:
+            common_knowledge_emb[idx][np.array(common_knowledge_codes) - 1] = 1.0
+
+    dataset = TensorDataset(
+        torch.tensor(user_id.values, dtype=torch.int64),
+        torch.tensor(item_id.values, dtype=torch.int64),
+        torch.tensor(score.values, dtype=torch.float32),
+        torch.tensor(group_id.values, dtype=torch.int64),
+        torch.tensor(fairness_id.values, dtype=torch.int64),
+        knowledge_emb,
+        common_knowledge_emb
+    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False, **params)
+
+# 准备用于提取能力参数的测试数据集
+test_fairness = transform2(
+    all_virtual_user_data["user_id"],
+    all_virtual_user_data["item_id"] - 1,
+    all_virtual_user_data["score"],
+    all_virtual_user_data["group_id"],
+    all_virtual_user_data["fairness_id"] - 1,
+    all_virtual_user_data["common_knowledge"],
+    item2knowledge,
+    batch_size
+)
+
+# 提取用户能力参数
+cdm.extract_ability_parameters(test_fairness, filepath="v_ability_parameters.csv")
