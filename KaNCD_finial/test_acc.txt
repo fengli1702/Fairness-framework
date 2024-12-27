@@ -1,0 +1,5 @@
+
+../data/a0910/origin_finial.csv
+IRT: test auc: 0.744491, accuracy: 0.708537
+../data/a0910/origin_finial.csv
+IRT: test auc: 0.717949, accuracy: 0.698350

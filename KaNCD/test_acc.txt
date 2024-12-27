@@ -1,0 +1,3 @@
+
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.762346, accuracy: 0.728085
