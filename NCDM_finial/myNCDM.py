@@ -113,13 +113,9 @@ class NCDM(CDM):
 
                     group_users = [i for i in range(group_start, group_start + group_sz)]
                     group_users = torch.tensor(group_users, dtype=torch.int64).to(device)
-                    #print("group_users:",group_users)
-                    #latent_dim = self.ncdm_net.student_emb.embedding_dim
-                    #k = max(1, latent_dim // 24 + 20)
-                    #random.seed(int(gid.item()))
-                    #selected_dims = random.sample(range(latent_dim), k)
+                    
                     selected_dims = comm_konw[group_mask][0].tolist()
-                    #print("selected_dims:",selected_dims)
+                   
                     theta_group_full = self.ncdm_net(group_users, None, None, fairness=True)
                     theta_group_selected = theta_group_full[:, selected_dims]
 
@@ -128,8 +124,6 @@ class NCDM(CDM):
                     targets_reshaped = group_users.view(1, -1)  # 目标 fairness_id
 
                     # 公平性损失计算：fairness_id 越低 theta 越高
-                    #print("predictions_reshaped:",predictions_reshaped)
-                    #print("targets_reshaped:",targets_reshaped)
                     fairness_loss_val = self.fairness_loss(predictions_reshaped, targets_reshaped)
 
                     group_fairness_losses.append(fairness_loss_val)
