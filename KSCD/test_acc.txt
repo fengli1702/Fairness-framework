@@ -1,0 +1,6 @@
+
+../data/a0910/origin_with_group_shuffled.csv
+KSCD: Test AUC: 0.761722, Accuracy: 0.724749
+
+../data/a0910/origin_with_group_shuffled.csv
+KSCD: Test AUC: 0.759969, Accuracy: 0.728138
