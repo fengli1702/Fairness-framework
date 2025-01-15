@@ -1,0 +1,12 @@
+
+ path: ../data/test/trainfinial.csv
+NCDM_final : test auc: 0.673728, accuracy: 0.671541
+
+ path: ../data/test/trainfinial.csv
+NCDM_final : test auc: 0.648765, accuracy: 0.666775
+
+ path: ../data/test/trainfinial.csv
+NCDM_final : test auc: 0.705106, accuracy: 0.656558
+
+ path: ../data/test/trainfinial.csv
+NCDM_final : test auc: 0.720231, accuracy: 0.674347
