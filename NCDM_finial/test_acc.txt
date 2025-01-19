@@ -1,0 +1,42 @@
+NCDM_finial : test auc: 0.605349, accuracy: 0.649803
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.664182, accuracy: 0.655004
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.664544, accuracy: 0.655075
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701232, accuracy: 0.655183
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701280, accuracy: 0.655434
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701289, accuracy: 0.654753
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701697, accuracy: 0.655542
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701297, accuracy: 0.655273
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.701264, accuracy: 0.656062
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.746162, accuracy: 0.708913
+
+ path: ../data/a0910/origin_with_group_shuffled.csv
+NCDM_final : test auc: 0.746588, accuracy: 0.709093
+
+ path: ../data/a0910/origin_finial.csv
+NCDM_final : test auc: 0.701636, accuracy: 0.656456
+
+ path: ../data/a0910/origin_finial.csv
+NCDM_final : test auc: 0.701355, accuracy: 0.656636
+
+ path: ../data/a0910/origin_finial.csv
+NCDM_final : test auc: 0.701242, accuracy: 0.657245
+
+ path: ../data/a0910/origin_finial.csv
+NCDM_final : test auc: 0.746811, accuracy: 0.712123

@@ -1,0 +1,9 @@
+
+ path: ../data/a0910/origin_finial.csv
+KSCD_final : test auc: 0.681384, accuracy: 0.654322
+
+ path: ../data/a0910/origin_finial.csv
+KSCD_final : test auc: 0.737068, accuracy: 0.708232
+
+ path: ../data/a0910/origin_finial.csv
+KSCD_final : test auc: 0.736795, accuracy: 0.714401

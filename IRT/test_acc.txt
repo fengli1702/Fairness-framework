@@ -1,0 +1,16 @@
+../data/a0910/origin_with_group_updated.csv
+IRT: test auc: 0.627295, accuracy: 0.662643
+../data/a0910/extand_with_group_updated.csv
+IRT: test auc: 0.638064, accuracy: 0.662590
+
+
+ //学习率0.01
+../data/a0910/extand_with_group_updated.csv
+IRT: test auc: 0.746494, accuracy: 0.713110
+../data/a0910/origin_with_group_updated.csv
+IRT: test auc: 0.745624, accuracy: 0.713540
+
+//学习率0.005
+//epoch 15
+../data/a0910/origin_with_group_updated.csv
+IRT: test auc: 0.746366, accuracy: 0.713971

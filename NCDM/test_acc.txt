@@ -1,0 +1,15 @@
+NCDM_finial : test auc: 0.588713, accuracy: 0.633124
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.753667, accuracy: 0.727816
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.753331, accuracy: 0.723260
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.753400, accuracy: 0.727421
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.721888, accuracy: 0.680111
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.721908, accuracy: 0.673691
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.753131, accuracy: 0.727331
+../data/a0910/origin_with_group_shuffled.csv
+IRT: test auc: 0.753617, accuracy: 0.726775

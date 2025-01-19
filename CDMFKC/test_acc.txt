@@ -1,0 +1,3 @@
+
+../data/test/trainfinial.csv
+IRT: test auc: 0.737457, accuracy: 0.700825
